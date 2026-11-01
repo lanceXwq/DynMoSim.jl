@@ -72,14 +72,14 @@ Because each emitter fires exactly once in that picture, **drawing a fresh posit
 
 ## Spherical caps: `Bend`
 
-A cap is the unit sphere bent by `Bend(kappa)` (κ below; the field `kappa`), the constant-area map (`@eq-bend` in the derivations), implemented as an `AbstractDeformation{3}` acting on material points from `SphereSurface{3}()` — the unit sphere centred at the origin, so `h = 1 - u_z`. `κ` is dimensionless, `-1 ≤ κ ≤ 1`, and may be a constant or `t -> κ`: `0` is a flat disk of radius 2, `±1` the whole sphere. The apex sits at the origin with outward normal `+z`, and an outer `Similarity` sets the size, orientation and position: with scale `s` and rotation `R`, the cap has area `4π s²`, physical curvature `κ / s`, and outward normal `R * ẑ` at the apex. `rotation(n)` gives the `R` that points that normal along `n`.
+A cap is the unit sphere bent by `Bend(kappa)` (κ below; the field `kappa`), the constant-area map (`@eq-bend` in the derivations), implemented as an `AbstractDeformation` acting on material points from `SphereSurface()` — the unit sphere centred at the origin, so `h = 1 - u_z`. `κ` is dimensionless, `-1 ≤ κ ≤ 1`, and may be a constant or `t -> κ`: `0` is a flat disk of radius 2, `±1` the whole sphere. The apex sits at the origin with outward normal `+z`, and an outer `Similarity` sets the size, orientation and position: with scale `s` and rotation `R`, the cap has area `4π s²`, physical curvature `κ / s`, and outward normal `R * ẑ` at the apex. `rotation(n)` gives the `R` that points that normal along `n`.
 
 ```julia
 # area 4π·60² nm², flat at t = 0 and about a hemisphere (κ = 1/√2) at t = 10,
 # apex at z = 200 nm, tilted 30° about x
 cap = Structure(
-    SphereSurface{3}(),
-    Similarity{3}(scale = 60.0, rot = rotation(SA[1.0, 0, 0], π / 6), shift = SA[0.0, 0, 200])
+    SphereSurface(),
+    Similarity(scale = 60.0, rot = rotation(SA[1.0, 0, 0], π / 6), shift = SA[0.0, 0, 200])
       ∘ Bend(t -> 0.07t),
 )
 ```
@@ -93,8 +93,8 @@ Implementation notes:
 
 - **Constant event rate.** A cap growing at constant curvature keeps the same total event rate, so it does not gain labels: its label density falls as `1/A(t)`. Time-varying rates were removed from SimSMLM deliberately, so this is accepted rather than fixed.
 - **Relation to the fitters.** Simulated ground truth maps one-to-one onto the fitted cap parameters:
-  - DynMoFit: this is the constant-area map of `DynMoFit.jl/derivations/derivation.qmd`. Its unit lattice is centred at `(0, 0, -1)`, so its depth is `-z` where SimSMLM's is `1 - u_z`. Its cap `(κ, scale, normal n, apex a)` is `Similarity{3}(scale = scale, rot = rotation(n), shift = a) ∘ Bend(κ)`.
-  - LocMoFit: its `SphericalCap` with curvature `c`, half-angle `α`, orientation `(θ, ϕ)` and apex `(x, y, z)` is `Similarity{3}(scale = sin(α/2) / c, rot = rotation(n), shift = SA[x, y, z]) ∘ Bend(sin(α/2))` with `n = (sin θ cos ϕ, sin θ sin ϕ, cos θ)`. For the same material points the two agree point for point, to rounding (checked to 2e-13).
+  - DynMoFit: this is the constant-area map of `DynMoFit.jl/derivations/derivation.qmd`. Its unit lattice is centred at `(0, 0, -1)`, so its depth is `-z` where SimSMLM's is `1 - u_z`. Its cap `(κ, scale, normal n, apex a)` is `Similarity(scale = scale, rot = rotation(n), shift = a) ∘ Bend(κ)`.
+  - LocMoFit: its `SphericalCap` with curvature `c`, half-angle `α`, orientation `(θ, ϕ)` and apex `(x, y, z)` is `Similarity(scale = sin(α/2) / c, rot = rotation(n), shift = SA[x, y, z]) ∘ Bend(sin(α/2))` with `n = (sin θ cos ϕ, sin θ sin ϕ, cos θ)`. For the same material points the two agree point for point, to rounding (checked to 2e-13).
 - **`rotation(n)`** is the shortest rotation taking `+z` onto `n`, about `ẑ × n` — the convention of LocMoFit's `rotmat(θ, ϕ)` and DynMoFit's `rotation_matrix(n)`. It goes through Rodrigues with the angle `atan(sin θ, cos θ)`, which stays accurate at both poles; DynMoFit's closed form divides by `1 + n_z`. At `n = -ẑ` the axis is undefined and `+y` is used, matching LocMoFit's `rotmat(π, 0)`.
 - **Numerics.**
   - `normalize(randn(...))` can give `|u_z|` a rounding error above 1, which would make `h(2 - κ²h)` slightly negative; `h` is clamped to `[0, 2]`.
@@ -112,9 +112,9 @@ Implementation notes:
 ```julia
 # a ring, and a cap 50 nm above it that bends while the ring stays flat
 scr = Composite(
-    Structure(Ring{3}(), Similarity{3}(scale = 50.0)) => 0.4,
-    Structure(SphereSurface{3}(),
-              Similarity{3}(scale = 40.0, shift = SA[0.0, 0, 50]) ∘ Bend(t -> 0.1t)) => 0.6,
+    Structure(Ring(), Similarity(scale = 50.0)) => 0.4,
+    Structure(SphereSurface(),
+              Similarity(scale = 40.0, shift = SA[0.0, 0, 50]) ∘ Bend(t -> 0.1t)) => 0.6,
 )
 locs, truth = simulate(scr; emis_rate = 2000.0, t_end = 5.0, optics = optics)
 
@@ -155,6 +155,19 @@ Iterating rows, iterating the point column, and scanning the raw matrix all allo
 - **No dependency.** A `NamedTuple` of vectors is a Tables.jl table by definition, so `CSV.write` and `DataFrame` accept it while SimSMLM depends on neither. Julia code downstream does not need it at all: `positions(locs)` and `precisions(locs)` are already the `D×N` matrices the fitters take.
 - **Copies.** The columns are fresh vectors (row slices of the `D×N` storage), so editing an exported table never changes the simulation.
 
+## 2D data: `project`
+
+Structures, deformations, the field of view and the uncertainty models are 3D only. A 2D dataset is a 3D simulation seen laterally: `project(locs, truth)` drops z from the localizations and the truth, row for row (`project(locs)` and `project(truth)` do one each).
+
+```julia
+locs, truth = project(simulate(structure; emis_rate, t_end, optics)...)
+```
+
+- **Exact in the model** (`@eq-projection` in the derivations). Event times, types and photon counts do not involve z; each localization's error and blur are independent per axis, so its x and y follow the 2D law of `@eq-blur` with the same lateral precisions; and the background, uniform in the 3D `FieldOfView`, projects to a uniform background in its xy rectangle. The background's density in the plane is `rate` over the rectangle's area: the depth of the field of view does not change it.
+- **What is kept.** Positions and precisions keep x and y; times, photon counts, `issignal` and `component` are unchanged. The truth keeps its 3D material coordinates `u` and its `motion`, so `place(truth.motion, truth.u[i], locs.t[i])[1:2] == truth.position[i]` on signal rows. `smaptable` of the projection has no z columns.
+- **Copies.** The projection owns its data, so editing it never changes the 3D simulation.
+- **Why there is no native 2D.** Shapes and deformations used to take a dimension parameter (`Ring{2}`, `Similarity{2}`, `rotation(θ)`); removed on 2026-10-30, so that 2D data have one source and always match the 3D model a 2D LocMoFit fit uses (the first two coordinates of its model points). 3D output did not change: the same seeds give bit-identical data, checked across every shape, deformation and option.
+
 ## Assumptions
 
 Deliberately not modeled:
@@ -168,3 +181,4 @@ Deliberately not modeled:
 - **Field-of-view clipping.** The `FieldOfView` places background only; signal localizations outside it are still reported.
 - **Detection bias.** Every event that emits at least one photon is detected and localized, however dim, and the reported uncertainty is the true one. Real pipelines miss faint events and misreport their precision.
 - **Axial PSF width** is a constant multiple of the lateral one, independent of z.
+- **Depth of field.** Every event is imaged however far it is from focus, so a 2D dataset from `project` contains the whole depth of the structure, with lateral precisions that do not depend on z.

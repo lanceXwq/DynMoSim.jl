@@ -20,14 +20,11 @@ rng() = StableRNG(20260905)
 
     @testset "deformations" begin
         u = SA[1.0, 0.0, 0.0]
-        @test place(Static{3}(), u, 5.0) == u
+        @test place(Static(), u, 5.0) == u
 
-        m = Similarity{3}(scale=t -> 100 + 20t, shift=t -> SA[10t, 0.0, 0.0])
+        m = Similarity(scale=t -> 100 + 20t, shift=t -> SA[10t, 0.0, 0.0])
         @test place(m, u, 0.0) ≈ SA[100.0, 0.0, 0.0]
         @test place(m, u, 1.0) ≈ SA[130.0, 0.0, 0.0]   # 120 from growth + 10 drift
-
-        r = Similarity{2}(rot=t -> rotation(t))
-        @test place(r, SA[1.0, 0.0], π / 2) ≈ SA[0.0, 1.0] atol = 1e-12
 
         R = rotation(SA[0.0, 0.0, 1.0], π / 2)
         @test R * SA[1.0, 0.0, 0.0] ≈ SA[0.0, 1.0, 0.0] atol = 1e-12
@@ -54,10 +51,10 @@ rng() = StableRNG(20260905)
         @test_throws ArgumentError rotation(SA[0.0, 0.0, 0.0])
         @test_throws DimensionMismatch rotation([1.0, 0.0])
 
-        inner = Similarity{3}(scale=2.0)
+        inner = Similarity(scale=2.0)
         outer = Drift(SA[1.0, 0.0, 0.0])
         @test place(outer ∘ inner, u, 0.0) ≈ SA[3.0, 0.0, 0.0]
-        @test place(Drift{3}(t -> SA[t, 0.0, 0.0]), u, 4.0) ≈ SA[5.0, 0.0, 0.0]
+        @test place(Drift(t -> SA[t, 0.0, 0.0]), u, 4.0) ≈ SA[5.0, 0.0, 0.0]
     end
 
     @testset "bend: constant-area cap" begin
@@ -80,7 +77,7 @@ rng() = StableRNG(20260905)
         # Uniform material points land uniformly on a cap of area 4π. For κ ≠ 0 every point lies on the sphere of radius 1/|κ| through the apex, and by the hat-box theorem uniform area means a uniform depth h = -z/κ on [0, 2]; for κ = 0 it means ρ′² uniform on [0, 4].
         r = rng()
         n = 40_000
-        sites = sample_sites(r, SphereSurface{3}(), n)
+        sites = sample_sites(r, SphereSurface(), n)
         for κ in (0.4, -0.9)
             xs = [place(Bend(κ), s, 0.0) for s in sites]
             c = SA[0.0, 0.0, -1 / κ]
@@ -98,7 +95,7 @@ rng() = StableRNG(20260905)
 
         # rotation(n) orients a cap by its outward normal at the apex: every point lies on the sphere of radius s/κ centred s/κ behind the apex
         n, s, κ, apex = normalize(SA[1.0, -2.0, 0.5]), 30.0, 0.6, SA[5.0, 0.0, -3.0]
-        m = Similarity{3}(scale=s, rot=rotation(n), shift=apex) ∘ Bend(κ)
+        m = Similarity(scale=s, rot=rotation(n), shift=apex) ∘ Bend(κ)
         centre = apex - (s / κ) * n
         @test all(x -> norm(place(m, x, 0.0) - centre) ≈ s / κ, sites)
         @test place(m, SA[0.0, 0.0, 1.0], 0.0) ≈ apex
@@ -109,40 +106,45 @@ rng() = StableRNG(20260905)
 
     @testset "shapes" begin
         r = rng()
-        @test sample_site(r, SphereSurface{3}()) isa SVector{3,Float64}
+        @test sample_site(r, SphereSurface()) isa SVector{3,Float64}
 
-        s = sample_sites(r, SphereSurface{3}(), 2000)
+        s = sample_sites(r, SphereSurface(), 2000)
         @test length(s) == 2000
         @test all(x -> norm(x) ≈ 1.0, s)
         @test mean(s) ≈ zero(SVector{3,Float64}) atol = 0.08   # isotropic
 
-        b = sample_sites(r, Ball{3}(), 2000)
+        b = sample_sites(r, Ball(), 2000)
         @test all(x -> norm(x) <= 1.0 + 1e-12, b)
         # uniform in the ball => E[r] = D/(D+1)
         @test mean(norm, b) ≈ 3 / 4 rtol = 0.03
 
-        ring = sample_sites(r, Ring{3}(), 2000)
+        ring = sample_sites(r, Ring(), 2000)
         @test all(x -> x[3] == 0.0, ring)
         @test all(x -> norm(x) ≈ 1.0, ring)
 
-        # in the plane the unit circle *is* the unit sphere, so Ring{2} and SphereSurface{2} are the same distribution; they diverge from D = 3 up
+        # the ring's azimuth is uniform: 8 bins of 40 000 draws, each 5000 ± about 70
         ang(v) = atan(v[2], v[1])
         bins(v) =
             [count(x -> lo <= ang(x) < lo + π / 4, v) for lo in range(-π, 3π / 4, length=8)]
-        @test all(≈(5000; rtol=0.08), bins(sample_sites(r, Ring{2}(), 40_000)))
-        @test all(≈(5000; rtol=0.08), bins(sample_sites(r, SphereSurface{2}(), 40_000)))
+        @test all(
+            ≈(5000; atol=4 * sqrt(5000 * 7 / 8)), bins(sample_sites(r, Ring(), 40_000))
+        )
 
-        seg = sample_sites(r, LineSegment(SA[0.0, 0.0], SA[1.0, 1.0]), 100)
-        @test all(x -> x[1] ≈ x[2], seg)
+        seg = sample_sites(r, LineSegment(SA[0.0, 0.0, 0.0], SA[1.0, 1.0, 2.0]), 100)
+        @test all(x -> x[1] ≈ x[2] && x[3] ≈ 2x[1], seg)
 
-        M = [1.0 2.0 3.0; 4.0 5.0 6.0]
-        @test tosites(M) == [SA[1.0, 4.0], SA[2.0, 5.0], SA[3.0, 6.0]]
-        # a point cloud now resamples with replacement, so points recur
+        M = [1.0 2.0 3.0; 4.0 5.0 6.0; 7.0 8.0 9.0]
+        @test tosites(M) == [SA[1.0, 4.0, 7.0], SA[2.0, 5.0, 8.0], SA[3.0, 6.0, 9.0]]
+        # a point cloud resamples with replacement, so points recur
         pc = PointCloud(M)
         draws = sample_sites(r, pc, 3000)
         @test all(in(tosites(M)), draws)
         @test length(unique(draws)) == 3
-        @test count(==(SA[1.0, 4.0]), draws) / 3000 ≈ 1 / 3 atol = 0.03
+        @test count(==(SA[1.0, 4.0, 7.0]), draws) / 3000 ≈ 1 / 3 atol = 0.03
+
+        # shapes are 3D only
+        @test_throws DimensionMismatch tosites([1.0 2.0; 3.0 4.0])
+        @test_throws DimensionMismatch LineSegment([0.0, 0.0], [1.0, 1.0])
     end
 
     @testset "event times" begin
@@ -169,7 +171,7 @@ rng() = StableRNG(20260905)
     @testset "photon count is geometric" begin
         r = rng()
         h, τ = 500.0, 0.1
-        o = Optics(uncertainty=ShotNoise{3}(100.0), brightness=h, ontime=τ)
+        o = Optics(uncertainty=ShotNoise(100.0), brightness=h, ontime=τ)
         @test meanphotons(o) == h * τ
         @test photondist(o) == Geometric(1 / (1 + h * τ))
 
@@ -190,44 +192,45 @@ rng() = StableRNG(20260905)
         @test count(==(1), kept) / length(kept) ≈ 1 / (1 + h * τ) rtol = 0.06
 
         @test_throws ArgumentError Optics(
-            uncertainty=ShotNoise{3}(100.0), brightness=0.0, ontime=τ
+            uncertainty=ShotNoise(100.0), brightness=0.0, ontime=τ
         )
     end
 
     @testset "uncertainty models" begin
-        @test psfwidths(3, 130.0) == SA[130.0, 130.0, 325.0]
-        @test psfwidths(2, 100.0) == SA[100.0, 100.0]
+        @test psfwidths(130.0) == SA[130.0, 130.0, 325.0]
+        @test psfwidths(100.0; z_factor=3) == SA[100.0, 100.0, 300.0]
 
-        ideal = ShotNoise{3}(130.0)
+        ideal = ShotNoise(130.0)
         @test uncertainty(ideal, 100) ≈ SA[13.0, 13.0, 32.5]
         @test uncertainty(ideal, 400) ≈ uncertainty(ideal, 100) ./ 2   # σ ∝ 1/√n
 
         # Stallinga-Rieger reduces to the shot-noise bound as background and pixel size vanish, and is strictly worse than it otherwise. Note v = 2π sₐ² b / (n a²), so b must go to zero at *fixed* a — shrinking both together holds v at a constant instead.
-        sr0 = StallingaRieger{2}(130.0; pixel=1e-3, background=0.0)
-        @test uncertainty(sr0, 500) ≈ uncertainty(ShotNoise{2}(130.0), 500) rtol = 1e-5
-        sr = StallingaRieger{2}(130.0; pixel=100.0, background=50.0)
-        @test all(uncertainty(sr, 500) .> uncertainty(ShotNoise{2}(130.0), 500))
+        sr0 = StallingaRieger(130.0; pixel=1e-3, background=0.0)
+        @test uncertainty(sr0, 500) ≈ uncertainty(ShotNoise(130.0), 500) rtol = 1e-5
+        sr = StallingaRieger(130.0; pixel=100.0, background=50.0)
+        @test all(uncertainty(sr, 500) .> uncertainty(ShotNoise(130.0), 500))
 
         # the Gaussian mask estimator keeps a 4/3 penalty even with no background
-        gm = GaussianMask{2}(130.0; pixel=1e-3, background=0.0)
+        gm = GaussianMask(130.0; pixel=1e-3, background=0.0)
         @test isapprox(
-            uncertainty(gm, 500),
-            uncertainty(ShotNoise{2}(130.0), 500) .* (4 / 3);
-            rtol=1e-5,
+            uncertainty(gm, 500), uncertainty(ShotNoise(130.0), 500) .* (4 / 3); rtol=1e-5
         )
 
-        @test_throws ArgumentError psfwidths(4, 100.0)
+        @test_throws DimensionMismatch ShotNoise([100.0, 100.0])
+        @test_throws DimensionMismatch StallingaRieger(
+            [1.0, 2.0]; pixel=100.0, background=1.0
+        )
     end
 
     @testset "end-to-end: static sphere" begin
         r = rng()
-        sphere = Structure(SphereSurface{3}(), Similarity{3}(scale=100.0))
+        sphere = Structure(SphereSurface(), Similarity(scale=100.0))
         locs, truth = simulate(
             r,
             sphere;
             emis_rate=(2000.0),
             t_end=50.0,
-            optics=Optics(uncertainty=ShotNoise{3}(120.0), brightness=1e5, ontime=0.01),
+            optics=Optics(uncertainty=ShotNoise(120.0), brightness=1e5, ontime=0.01),
         )
 
         @test locs isa LocalizationTable{3,Float64}
@@ -267,15 +270,14 @@ rng() = StableRNG(20260905)
 
     @testset "end-to-end: growing, drifting sphere" begin
         sphere = Structure(
-            SphereSurface{3}(),
-            Similarity{3}(scale=t -> 100 + 20t, shift=t -> SA[10t, 0.0, 0.0]),
+            SphereSurface(), Similarity(scale=t -> 100 + 20t, shift=t -> SA[10t, 0.0, 0.0])
         )
         locs, truth = simulate(
             rng(),
             sphere;
             emis_rate=(1000.0),
             t_end=10.0,
-            optics=Optics(uncertainty=ShotNoise{3}(120.0), brightness=1e5, ontime=0.01),
+            optics=Optics(uncertainty=ShotNoise(120.0), brightness=1e5, ontime=0.01),
         )
         @test !isempty(locs)
 
@@ -299,10 +301,10 @@ rng() = StableRNG(20260905)
     end
 
     @testset "t_end bounds the acquisition" begin
-        sphere = Structure(SphereSurface{3}(), Similarity{3}(scale=100.0))
+        sphere = Structure(SphereSurface(), Similarity(scale=100.0))
         kw = (
             emis_rate=5000.0,
-            optics=Optics(uncertainty=ShotNoise{3}(120.0), brightness=1e6, ontime=0.01),
+            optics=Optics(uncertainty=ShotNoise(120.0), brightness=1e6, ontime=0.01),
         )
         short, _ = simulate(rng(), sphere; t_end=5.0, kw...)
         long, _ = simulate(rng(), sphere; t_end=10.0, kw...)
@@ -332,9 +334,8 @@ rng() = StableRNG(20260905)
     end
 
     @testset "field of view" begin
-        f = FieldOfView(SA[-100.0, -50.0], SA[100.0, 150.0])
-        @test ndim(f) == 2
-        @test volume(f) == 200.0 * 200.0
+        f = FieldOfView(SA[-100.0, -50.0, 0.0], SA[100.0, 150.0, 50.0])
+        @test volume(f) == 200.0 * 200.0 * 50.0
 
         r = rng()
         pts = [randin(r, f) for _ in 1:200_000]
@@ -343,14 +344,15 @@ rng() = StableRNG(20260905)
         # uniform on [lo,hi] has variance (hi-lo)^2/12
         @test var([p[1] for p in pts]) ≈ 200.0^2 / 12 rtol = 0.03
         @test var([p[2] for p in pts]) ≈ 200.0^2 / 12 rtol = 0.03
+        @test var([p[3] for p in pts]) ≈ 50.0^2 / 12 rtol = 0.03
 
-        @test_throws ArgumentError FieldOfView(SA[0.0, 0.0], SA[1.0, 0.0])   # hi == lo
-        @test_throws ArgumentError FieldOfView(SA[0.0], SA[1.0, 2.0])        # length mismatch
+        @test_throws ArgumentError FieldOfView(SA[0.0, 0.0, 0.0], SA[1.0, 0.0, 1.0])   # hi == lo
+        @test_throws DimensionMismatch FieldOfView([0.0, 0.0], [1.0, 1.0])   # not 3D
     end
 
     @testset "background localizations" begin
         fov = FieldOfView(SA[-400.0, -400.0, -400.0], SA[400.0, 400.0, 400.0])
-        sphere = Structure(SphereSurface{3}(), Similarity{3}(scale=100.0))
+        sphere = Structure(SphereSurface(), Similarity(scale=100.0))
         λs, λb = 2000.0, 500.0
         μs, μb = 1e5 * 0.01, 40.0        # background is much dimmer than signal
         locs, truth = simulate(
@@ -358,7 +360,7 @@ rng() = StableRNG(20260905)
             sphere;
             emis_rate=(λs),
             t_end=20.0,
-            optics=Optics(uncertainty=ShotNoise{3}(120.0), brightness=1e5, ontime=0.01),
+            optics=Optics(uncertainty=ShotNoise(120.0), brightness=1e5, ontime=0.01),
             background=Background(rate=λb, fov=fov, meanphotons=μb),
         )
 
@@ -390,7 +392,7 @@ rng() = StableRNG(20260905)
             sphere;
             emis_rate=(λs),
             t_end=2.0,
-            optics=Optics(uncertainty=ShotNoise{3}(120.0), brightness=1e5, ontime=0.01),
+            optics=Optics(uncertainty=ShotNoise(120.0), brightness=1e5, ontime=0.01),
             background=Background(rate=0.0, fov=fov, meanphotons=μb),
         )
         @test nbackground(t0) == 0
@@ -412,15 +414,13 @@ rng() = StableRNG(20260905)
     @testset "end-to-end: bending cap" begin
         # constant area 4π·50², flat at t = 0 and curving to κ = 0.9 at t = 9
         s, apex = 50.0, SA[0.0, 0.0, 100.0]
-        cap = Structure(
-            SphereSurface{3}(), Similarity{3}(scale=s, shift=apex) ∘ Bend(t -> 0.1t)
-        )
+        cap = Structure(SphereSurface(), Similarity(scale=s, shift=apex) ∘ Bend(t -> 0.1t))
         locs, truth = @inferred simulate(
             rng(),
             cap;
             emis_rate=2000.0,
             t_end=9.0,
-            optics=Optics(uncertainty=ShotNoise{3}(120.0), brightness=1e5, ontime=0.01),
+            optics=Optics(uncertainty=ShotNoise(120.0), brightness=1e5, ontime=0.01),
         )
         @test !isempty(locs)
         # every true position is the bend of its own material point at its own time: depth below the apex, in units of s, is κ(t)·(1 - u_z)
@@ -445,7 +445,7 @@ rng() = StableRNG(20260905)
         )
         locs, truth = simulate(
             rng(),
-            Structure(SphereSurface{3}(), Similarity{3}(scale=100.0));
+            Structure(SphereSurface(), Similarity(scale=100.0));
             emis_rate=500.0,
             t_end=1.0,
             optics=opt,
@@ -484,27 +484,21 @@ rng() = StableRNG(20260905)
         @test gt.component == truth.component
 
         # 2D: no z columns
-        l2, t2 = simulate(
-            rng(),
-            Structure(Ring{2}(), Similarity{2}(scale=50.0));
-            emis_rate=500.0,
-            t_end=1.0,
-            optics=Optics(uncertainty=ShotNoise{2}(100.0), brightness=1e5, ontime=0.01),
-        )
+        l2, t2 = project(locs, truth)
         @test keys(smaptable(l2)) ==
             (:x_nm, :y_nm, :x_err_nm, :y_err_nm, :xy_err_nm, :photons, :time_s)
         @test keys(smaptable(t2)) == (:x_nm, :y_nm, :is_signal, :component)
     end
 
     @testset "composite structures" begin
-        ring = Structure(Ring{3}(), Similarity{3}(scale=50.0))
+        ring = Structure(Ring(), Similarity(scale=50.0))
         cap = Structure(
-            SphereSurface{3}(),
-            Similarity{3}(scale=40.0, shift=SA[0.0, 0.0, 80.0]) ∘ Bend(t -> 0.05t),
+            SphereSurface(),
+            Similarity(scale=40.0, shift=SA[0.0, 0.0, 80.0]) ∘ Bend(t -> 0.05t),
         )
         scr = Composite(ring => 1.0, cap => 3.0)
         fov = FieldOfView(SA[-300.0, -300.0, -300.0], SA[300.0, 300.0, 300.0])
-        opt = Optics(uncertainty=ShotNoise{3}(120.0), brightness=1e5, ontime=0.01)
+        opt = Optics(uncertainty=ShotNoise(120.0), brightness=1e5, ontime=0.01)
         kw = (emis_rate=2000.0, t_end=10.0, optics=opt)
         locs, truth = @inferred simulate(
             rng(), scr; kw..., background=Background(rate=200.0, fov=fov, meanphotons=40.0)
@@ -550,13 +544,12 @@ rng() = StableRNG(20260905)
         @test_throws ArgumentError Composite(ring => -1.0, cap => 1.0)
         @test_throws ArgumentError Composite(ring => 0.0, cap => 0.0)
         @test_throws ArgumentError Composite(ring => Inf, cap => 1.0)
-        @test_throws DimensionMismatch Composite(ring => 1.0, Structure(Ring{2}()) => 1.0)
     end
 
     @testset "blur" begin
-        sphere = Structure(SphereSurface{3}(), Similarity{3}(scale=100.0))
+        sphere = Structure(SphereSurface(), Similarity(scale=100.0))
         fov = FieldOfView(SA[-300.0, -300.0, -300.0], SA[300.0, 300.0, 300.0])
-        opt = Optics(uncertainty=ShotNoise{3}(120.0), brightness=1e5, ontime=0.01)
+        opt = Optics(uncertainty=ShotNoise(120.0), brightness=1e5, ontime=0.01)
         kw = (
             emis_rate=5000.0,
             t_end=10.0,
@@ -586,21 +579,67 @@ rng() = StableRNG(20260905)
             @test std(z[d, :]) ≈ 1.0 atol = 4se / sqrt(2)
         end
 
-        # 2D: the same law in the plane
-        ring = Structure(Ring{2}(), Similarity{2}(scale=50.0))
-        opt2 = Optics(uncertainty=ShotNoise{2}(120.0), brightness=1e5, ontime=0.01)
-        l2, t2 = simulate(rng(), ring; emis_rate=5000.0, t_end=10.0, optics=opt2, blur=β)
-        z2 = errors(l2, t2) ./ sqrt.(precisions(l2) .^ 2 .+ β^2)
-        @test std(vec(z2)) ≈ 1.0 atol = 4 / sqrt(2 * length(z2))
-
         @test_throws ArgumentError simulate(rng(), sphere; kw..., blur=-1.0)
         @test_throws ArgumentError simulate(rng(), sphere; kw..., blur=NaN)
         @test_throws ArgumentError simulate(rng(), sphere; kw..., blur=Inf)
     end
 
+    @testset "projection to 2D" begin
+        # a tilted ring with a blur and background, seen in 2D
+        ring = Structure(
+            Ring(),
+            Similarity(
+                scale=50.0, rot=rotation(SA[1.0, 0.0, 0.0], 0.6), shift=SA[0.0, 0.0, 30.0]
+            ),
+        )
+        fov = FieldOfView(SA[-150.0, -100.0, -50.0], SA[150.0, 100.0, 50.0])
+        β = 5.0
+        locs, truth = simulate(
+            rng(),
+            ring;
+            emis_rate=5000.0,
+            t_end=10.0,
+            optics=Optics(uncertainty=ShotNoise(120.0), brightness=1e5, ontime=0.01),
+            background=Background(rate=1000.0, fov=fov, meanphotons=200.0),
+            blur=β,
+        )
+        l2, t2 = @inferred project(locs, truth)
+        @test l2 isa LocalizationTable{2,Float64}
+        @test t2 isa Truth{2,Float64}
+
+        # row for row the same data without z; the truth keeps its 3D material coordinates and motion, which still give the projected structure point
+        @test positions(l2) == positions(locs)[1:2, :]
+        @test precisions(l2) == precisions(locs)[1:2, :]
+        @test l2.t == locs.t && l2.nphotons == locs.nphotons
+        @test truepositions(t2) == truepositions(truth)[1:2, :]
+        @test t2.issignal == truth.issignal && t2.component == truth.component
+        @test isequal(t2.u, truth.u) && t2.motion === truth.motion   # isequal: background u is NaN
+        sig = findall(t2.issignal)
+        @test all(i -> place(t2.motion, t2.u[i], l2.t[i])[SA[1, 2]] ≈ t2.position[i], sig)
+        @test project(locs) == l2 && truepositions(project(truth)) == truepositions(t2)
+
+        # the 2D law (@eq-blur with D = 2): signal residuals over √(precision² + blur²), background residuals over the precision, standard normal on both axes
+        z = errors(l2, t2) ./ precisions(l2)
+        zs = errors(l2, t2)[:, sig] ./ sqrt.(precisions(l2)[:, sig] .^ 2 .+ β^2)
+        for d in 1:2
+            @test std(zs[d, :]) ≈ 1.0 atol = 4 / sqrt(2 * size(zs, 2))
+            @test std(z[d, .!t2.issignal]) ≈ 1.0 atol = 4 / sqrt(2 * nbackground(t2))
+        end
+        # projected background is uniform in the xy rectangle: variance (hi - lo)²/12 per axis
+        bg = truepositions(t2)[:, .!t2.issignal]
+        @test var(bg[1, :]) ≈ 300.0^2 / 12 rtol = 4 * sqrt(0.8 / size(bg, 2))
+        @test var(bg[2, :]) ≈ 200.0^2 / 12 rtol = 4 * sqrt(0.8 / size(bg, 2))
+
+        # copies: editing the projection leaves the 3D data untouched
+        positions(l2)[1, 1] += 1
+        @test positions(locs)[1, 1] != positions(l2)[1, 1]
+
+        @test_throws DimensionMismatch project(locs[1:10], truth)
+    end
+
     @testset "nevents and t_end are exclusive" begin
-        sphere = Structure(SphereSurface{3}(), Similarity{3}(scale=100.0))
-        opt = Optics(uncertainty=ShotNoise{3}(120.0), brightness=1e6, ontime=0.01)
+        sphere = Structure(SphereSurface(), Similarity(scale=100.0))
+        opt = Optics(uncertainty=ShotNoise(120.0), brightness=1e6, ontime=0.01)
         kw = (emis_rate=(1000.0), optics=opt)
 
         # nevents counts events; the zero-photon fraction trims the yield
@@ -616,11 +655,11 @@ rng() = StableRNG(20260905)
     end
 
     @testset "reproducibility" begin
-        s = Structure(SphereSurface{3}(), Similarity{3}(scale=100.0))
+        s = Structure(SphereSurface(), Similarity(scale=100.0))
         kw = (
             emis_rate=(500.0),
             t_end=2.0,
-            optics=Optics(uncertainty=ShotNoise{3}(120.0), brightness=1e5, ontime=0.01),
+            optics=Optics(uncertainty=ShotNoise(120.0), brightness=1e5, ontime=0.01),
         )
         a, ta = simulate(rng(), s; kw...)
         b, tb = simulate(rng(), s; kw...)
@@ -629,7 +668,7 @@ rng() = StableRNG(20260905)
         @test ta.position == tb.position
 
         # the shape/motion convenience form is the same as building a Structure
-        c, _ = simulate(rng(), SphereSurface{3}(), Similarity{3}(scale=100.0); kw...)
+        c, _ = simulate(rng(), SphereSurface(), Similarity(scale=100.0); kw...)
         @test c.position == a.position
     end
 end

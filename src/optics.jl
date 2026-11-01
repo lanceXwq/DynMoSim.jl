@@ -3,18 +3,18 @@
 # ---------------------------------------------------------------------------
 
 """
-    AbstractUncertainty{D}
+    AbstractUncertainty
 
-Maps a detected photon count to a per-axis localization standard deviation. Subtypes implement
+Maps a detected photon count to a per-axis localization standard deviation, in x, y and z. Subtypes implement
 
-    uncertainty(model, n) -> SVector{D}
+    uncertainty(model, n) -> SVector{3}
 
 Swapping the model is the supported way to make the noise more realistic without touching the rest of the pipeline.
 """
-abstract type AbstractUncertainty{D} end
+abstract type AbstractUncertainty end
 
 """
-    uncertainty(model, n) -> SVector{D}
+    uncertainty(model, n) -> SVector{3}
 
 Per-axis localization standard deviation for `n` detected photons.
 
@@ -22,30 +22,23 @@ Named `uncertainty` rather than `precision` because `Base.precision` already mea
 """
 function uncertainty end
 
-ndim(::AbstractUncertainty{D}) where {D} = D
-
 """
-    psfwidths(D, sigma_xy; z_factor=2.5) -> SVector{D}
+    psfwidths(sigma_xy; z_factor=2.5) -> SVector{3}
 
-Per-axis Gaussian PSF widths: `sigma_xy` laterally and `z_factor * sigma_xy` axially. The axial width of a real astigmatic or biplane PSF varies strongly with z, so a constant factor is an approximation that degrades away from focus.
+Per-axis Gaussian PSF widths: `sigma_xy` laterally and `z_factor * sigma_xy` axially. The axial width of a real astigmatic or biplane PSF varies strongly with z, so a constant factor is an approximation that degrades away from focus. For a 2D dataset the axial width does not matter: [`project`](@ref) drops z.
 """
-function psfwidths(D::Integer, σ_xy::Real; z_factor=2.5)
-    if D == 2
-        return SVector{2,Float64}(σ_xy, σ_xy)
-    elseif D == 3
-        return SVector{3,Float64}(σ_xy, σ_xy, z_factor * σ_xy)
-    else
-        throw(
-            ArgumentError(
-                "psfwidths needs D of 2 or 3, got $D; pass a width vector instead"
-            ),
-        )
-    end
+psfwidths(σ_xy::Real; z_factor=2.5) = SVector{3,Float64}(σ_xy, σ_xy, z_factor * σ_xy)
+
+# A width vector as the models store it.
+function _widths(σ::AbstractVector)
+    length(σ) == 3 ||
+        throw(DimensionMismatch("PSF widths need 3 entries (x, y, z), got $(length(σ))"))
+    return SVector{3,Float64}(σ)
 end
 
 """
     ShotNoise(sigma)
-    ShotNoise{D}(sigma_xy; z_factor=2.5)
+    ShotNoise(sigma_xy; z_factor=2.5)
 
 The shot-noise-limited Cramér–Rao bound for a Gaussian PSF — no background, no pixelation, no readout noise. `sigma` holds the per-axis PSF widths s (stored in the field `sigma`; `sigma_xy` gives them through [`psfwidths`](@ref)):
 
@@ -53,18 +46,18 @@ The shot-noise-limited Cramér–Rao bound for a Gaussian PSF — no background,
 
 Because `n` is geometric rather than fixed, the resulting spread of `σ_loc` is heavy-tailed: rare one- and two-photon events give enormous uncertainties. The continuous approximation is Fréchet with shape 2, whose variance diverges, so summarise simulated uncertainties with medians rather than means.
 """
-struct ShotNoise{D,T} <: AbstractUncertainty{D}
-    sigma::SVector{D,T}
+struct ShotNoise{T} <: AbstractUncertainty
+    sigma::SVector{3,T}
 end
 
-ShotNoise(σ::AbstractVector) = ShotNoise(SVector{length(σ),Float64}(σ))
-ShotNoise{D}(σ_xy::Real; kwargs...) where {D} = ShotNoise(psfwidths(D, σ_xy; kwargs...))
+ShotNoise(σ::AbstractVector) = ShotNoise(_widths(σ))
+ShotNoise(σ_xy::Real; kwargs...) = ShotNoise(psfwidths(σ_xy; kwargs...))
 
 @inline uncertainty(m::ShotNoise, n::Integer) = m.sigma ./ sqrt(n)
 
 """
     StallingaRieger(sigma; pixel, background)
-    StallingaRieger{D}(sigma_xy; pixel, background, z_factor=2.5)
+    StallingaRieger(sigma_xy; pixel, background, z_factor=2.5)
 
 Stallinga & Rieger's closed-form approximation to the MLE variance with background and pixelation,
 
@@ -73,19 +66,19 @@ Stallinga & Rieger's closed-form approximation to the MLE variance with backgrou
 
 with PSF widths s (the field `sigma`), pixel size `a` and `b` background photons per pixel. Reduces to [`ShotNoise`](@ref) as `b → 0` and `a → 0`.
 
-Background is an image-plane quantity, so applying it per-axis in 3D is a convenient extrapolation rather than a derived result.
+Background is an image-plane quantity, so applying it to the axial width is a convenient extrapolation rather than a derived result.
 """
-struct StallingaRieger{D,T} <: AbstractUncertainty{D}
-    sigma::SVector{D,T}
+struct StallingaRieger{T} <: AbstractUncertainty
+    sigma::SVector{3,T}
     pixel::T
     background::T
 end
 
 function StallingaRieger(σ::AbstractVector; pixel, background)
-    return StallingaRieger(SVector{length(σ),Float64}(σ), float(pixel), float(background))
+    return StallingaRieger(_widths(σ), float(pixel), float(background))
 end
-function StallingaRieger{D}(σ_xy::Real; pixel, background, kwargs...) where {D}
-    return StallingaRieger(psfwidths(D, σ_xy; kwargs...); pixel, background)
+function StallingaRieger(σ_xy::Real; pixel, background, kwargs...)
+    return StallingaRieger(psfwidths(σ_xy; kwargs...); pixel, background)
 end
 
 @inline function uncertainty(m::StallingaRieger, n::Integer)
@@ -96,7 +89,7 @@ end
 
 """
     GaussianMask(sigma; pixel, background)
-    GaussianMask{D}(sigma_xy; pixel, background, z_factor=2.5)
+    GaussianMask(sigma_xy; pixel, background, z_factor=2.5)
 
 Mortensen et al.'s variance for a Gaussian mask (unweighted least-squares) estimator, with PSF widths s in the field `sigma` and `sₐ` and `v` as in [`StallingaRieger`](@ref),
 
@@ -104,17 +97,17 @@ Mortensen et al.'s variance for a Gaussian mask (unweighted least-squares) estim
 
 Note this does *not* reduce to the Cramér–Rao bound as `b → 0` — the estimator is not efficient, leaving the residual factor of 16/9.
 """
-struct GaussianMask{D,T} <: AbstractUncertainty{D}
-    sigma::SVector{D,T}
+struct GaussianMask{T} <: AbstractUncertainty
+    sigma::SVector{3,T}
     pixel::T
     background::T
 end
 
 function GaussianMask(σ::AbstractVector; pixel, background)
-    return GaussianMask(SVector{length(σ),Float64}(σ), float(pixel), float(background))
+    return GaussianMask(_widths(σ), float(pixel), float(background))
 end
-function GaussianMask{D}(σ_xy::Real; pixel, background, kwargs...) where {D}
-    return GaussianMask(psfwidths(D, σ_xy; kwargs...); pixel, background)
+function GaussianMask(σ_xy::Real; pixel, background, kwargs...)
+    return GaussianMask(psfwidths(σ_xy; kwargs...); pixel, background)
 end
 
 @inline function uncertainty(m::GaussianMask, n::Integer)
@@ -144,20 +137,18 @@ so the ON duration never has to be sampled — one draw per event, not two. The 
 
 That marginal puts mass `p` on `N = 0`. An event that emits no detected photons leaves nothing to fit, so `simulate` drops it — not as a tunable threshold, but because there is no localization to report. `brightness` and `ontime` therefore describe *emission events*; see [`photondist`](@ref) for what survives.
 """
-struct Optics{D,T,P<:AbstractUncertainty}
+struct Optics{T,P<:AbstractUncertainty}
     uncertainty::P
     brightness::T
     ontime::T
 end
 
-function Optics(; uncertainty::AbstractUncertainty{D}, brightness, ontime) where {D}
+function Optics(; uncertainty::AbstractUncertainty, brightness, ontime)
     brightness > 0 || throw(ArgumentError("brightness must be positive, got $brightness"))
     ontime > 0 || throw(ArgumentError("ontime must be positive, got $ontime"))
     h, τ = promote(float(brightness), float(ontime))
-    return Optics{D,typeof(h),typeof(uncertainty)}(uncertainty, h, τ)
+    return Optics{typeof(h),typeof(uncertainty)}(uncertainty, h, τ)
 end
-
-ndim(::Optics{D}) where {D} = D
 
 """
     meanphotons(o) -> h * τ

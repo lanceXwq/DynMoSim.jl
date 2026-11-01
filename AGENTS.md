@@ -21,7 +21,7 @@ CI and `[compat]` target Julia 1.13 only (see Compatibility in `../AGENTS.md`); 
 |---|---|
 | `src/SimSMLM.jl` | Module: `using` lines, all exports, `include` order |
 | `src/timevarying.jl` | `at(p, t)` — any parameter may be a constant or a function of time |
-| `src/types.jl` | `Localization`, `LocalizationTable`, `Truth` (incl. `component`), `columnview`, accessors, `smaptable` (export with SMAPpy column names) |
+| `src/types.jl` | `Localization`, `LocalizationTable`, `Truth` (incl. `component`), `columnview`, accessors, `project` (3D → 2D), `smaptable` (export with SMAPpy column names) |
 | `src/deformation.jl` | `place(d, u, t)`: `Static`, `Similarity`, `Drift`, `Bend` (constant-area cap), `Composed` (`∘`), `rotation` |
 | `src/shapes.jl` | `sample_site(rng, shape)`: `SphereSurface`, `Ball`, `Ring`, `LineSegment`, `PointCloud` |
 | `src/events.jl` | `eventtimes(rng, rate, t_end)` and `eventtimes(rng, rate, n)` |
@@ -58,7 +58,8 @@ The physical derivations live in `derivations/derivation.qmd`; if you change the
 ## Data layout (important)
 
 - Each `Localization` is a struct with fields including a localization's position, precision, and time tag.
-- The position and precision shall each be a `SVector{D,T}` with `D ∈ {2,3}` as a **type parameter**.
+- The position and precision shall each be a `SVector{D,T}` with `D ∈ {2,3}` as a **type parameter**: `D = 3` from `simulate`, `D = 2` after `project`.
+- Shapes, deformations, structures, the field of view and the uncertainty models are **3D only**, with no dimension parameter. 2D data come only from `project`; don't reintroduce 2D shapes or deformations.
 - When creating a vector of localizations, the vector should be created as a `StructArray`, such that all positions are in one contiguous memory block. The same for precisions, and time tag.
 
 ## Conventions

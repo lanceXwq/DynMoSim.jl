@@ -13,14 +13,14 @@ using SimSMLM, StaticArrays
 
 # a sphere growing from 100 nm at 20 nm/s, drifting along x at 10 nm/s
 sphere = Structure(
-    SphereSurface{3}(),
-    Similarity{3}(scale = t -> 100 + 20t, shift = t -> SA[10t, 0.0, 0.0]),
+    SphereSurface(),
+    Similarity(scale = t -> 100 + 20t, shift = t -> SA[10t, 0.0, 0.0]),
 )
 
 locs, truth = simulate(sphere;
     emis_rate = 2000.0,                                   # emission events per second
     t_end     = 10.0,                                     # acquisition length, s
-    optics    = Optics(uncertainty = ShotNoise{3}(120.0), # PSF width, nm
+    optics    = Optics(uncertainty = ShotNoise(120.0), # PSF width, nm
                        brightness  = 1e5,                 # h, detected photons/s
                        ontime      = 0.01),               # τ, mean ON duration
     background = Background(rate = 200.0,                 # spurious events/s
@@ -52,12 +52,12 @@ A spherical cap is the unit sphere bent by `Bend(kappa)`, and `Composite` images
 ```julia
 # a ring, and a cap 50 nm above it that curves from flat while the ring stays put
 scr = Composite(
-    Structure(Ring{3}(), Similarity{3}(scale = 50.0)) => 0.4,
-    Structure(SphereSurface{3}(),
-              Similarity{3}(scale = 40.0, shift = SA[0.0, 0, 50]) ∘ Bend(t -> 0.1t)) => 0.6,
+    Structure(Ring(), Similarity(scale = 50.0)) => 0.4,
+    Structure(SphereSurface(),
+              Similarity(scale = 40.0, shift = SA[0.0, 0, 50]) ∘ Bend(t -> 0.1t)) => 0.6,
 )
 locs, truth = simulate(scr; emis_rate = 2000.0, t_end = 5.0,
-    optics = Optics(uncertainty = ShotNoise{3}(120.0), brightness = 1e5, ontime = 0.01))
+    optics = Optics(uncertainty = ShotNoise(120.0), brightness = 1e5, ontime = 0.01))
 
 truth.component        # which part each localization came from (0 for spurious)
 ```
@@ -69,14 +69,14 @@ truth.component        # which part each localization came from (0 for spurious)
 ```julia
 # eight labels on a 50 nm ring, NPC-like
 φ = 2π .* (0:7) ./ 8
-npc = Structure(PointCloud([cos.(φ) sin.(φ) zeros(8)]'), Similarity{3}(scale = 50.0))
+npc = Structure(PointCloud([cos.(φ) sin.(φ) zeros(8)]'), Similarity(scale = 50.0))
 
 # 200 fixed labels scattered over a lattice that curves from flat
-labels = PointCloud(sample_sites(SphereSurface{3}(), 200))
-cap = Structure(labels, Similarity{3}(scale = 40.0) ∘ Bend(t -> 0.1t))
+labels = PointCloud(sample_sites(SphereSurface(), 200))
+cap = Structure(labels, Similarity(scale = 40.0) ∘ Bend(t -> 0.1t))
 
 locs, truth = simulate(cap; emis_rate = 2000.0, t_end = 5.0,
-    optics = Optics(uncertainty = ShotNoise{3}(120.0), brightness = 1e5, ontime = 0.01))
+    optics = Optics(uncertainty = ShotNoise(120.0), brightness = 1e5, ontime = 0.01))
 
 truth.u                # the label behind each localization
 ```
@@ -85,13 +85,14 @@ For partial labeling, keep a random subset of the points: `PointCloud(pts[:, ran
 
 ## Building blocks
 
-- **Shapes**: `SphereSurface`, `Ball`, `Ring`, `LineSegment`, `PointCloud` (wrap your own `D×N` matrix). Orientation is the deformation's job, so shapes sit in the xy-plane and `Similarity`'s `rot` turns them.
+- **Shapes**: `SphereSurface`, `Ball`, `Ring`, `LineSegment`, `PointCloud` (wrap your own `3×N` matrix). Orientation is the deformation's job, so shapes sit in the xy-plane and `Similarity`'s `rot` turns them.
 - **Deformations**: `Static`, `Similarity` (scale/rotate/translate, each constant or `t -> ...`), `Drift`, `Bend` (unit sphere → constant-area spherical cap of dimensionless curvature `kappa`), `Composed` (via `∘`), plus `rotation` helpers — `rotation(n)` points a structure's `+z` along a normal `n`
 - **Structures**: `Structure` (a shape and its deformation), `Composite` (several structures, each with its own deformation and share of the events)
 - **Events**: `eventtimes` at a constant rate, over either a `t_end` or a fixed count
 - **Background**: `Background` + `FieldOfView` for spurious localizations, with their own photon budget
 - **Blur**: `simulate(...; blur)`, an isotropic Gaussian displacement of each signal emitter from the structure (the label's size; LocMoFit's `sigma`)
 - **Uncertainty**: `ShotNoise` (Cramér–Rao, `s/√n`), `StallingaRieger` and `GaussianMask` (both with background and pixelation)
+- **2D data**: everything is simulated in 3D; `project(locs, truth)` drops z for a 2D dataset
 - **Export**: `smaptable` — flat columns with SMAPpy's names (`x_nm`, `xy_err_nm`, `photons`, `time_s`, …) that `CSV.write` or `DataFrame` take directly; the truth exports as its own table
 
 Any model field accepts either a constant or a function of time, resolved by `at(p, t)`. Structs are parametric on those field types so the call inlines; the whole pipeline is type-stable and runs ~10⁷ localizations/s.

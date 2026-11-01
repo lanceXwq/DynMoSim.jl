@@ -23,6 +23,7 @@ export at
 # core types
 export Localization, LocalizationTable, Truth, columnview
 export positions, precisions, truepositions, errors, nsignal, nbackground, smaptable
+export project
 
 # geometry
 export AbstractShape, SphereSurface, Ball, Ring, LineSegment, PointCloud

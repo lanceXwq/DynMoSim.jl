@@ -1,7 +1,7 @@
 """
     Localization{D,T}
 
-One localization in `D` dimensions, as a fitting routine would report it.
+One localization in `D` dimensions, as a fitting routine would report it: `D = 3` from [`simulate`](@ref), `D = 2` after [`project`](@ref).
 
 - `position`  — noisy position estimate
 - `precision` — per-axis standard deviation of that estimate
@@ -84,12 +84,12 @@ precisions(l::LocalizationTable) = _matrix(l.precision)
 ndim(::LocalizationTable{D}) where {D} = D
 
 """
-    Truth{D,T,M,C}
+    Truth{D,T,M,C,U}
 
 Ground truth for a simulated dataset, aligned element-for-element with the localization table it came from, and stored the same way — contiguous matrices viewed as columns of static vectors.
 
-- `position` — the noise-free position each localization was drawn from: the point on the structure, without the emitter's displacement when [`simulate`](@ref) adds a `blur`
-- `u`        — the material coordinate on the reference shape
+- `position` — the noise-free position each localization was drawn from: the point on the structure, without the emitter's displacement when [`simulate`](@ref) adds a `blur`; in `D` dimensions, like the localizations
+- `u`        — the material coordinate on the reference shape, always 3D, since shapes and deformations are
 - `issignal` — `false` for a spurious localization (see [`Background`](@ref))
 - `component` — which component of a [`Composite`](@ref) produced it: `1` for a plain [`Structure`](@ref), `0` for a spurious localization
 - `motion`   — the deformation in force; for a `Composite`, a tuple with one per component, so row `i` was placed by `motion[component[i]]`
@@ -97,10 +97,12 @@ Ground truth for a simulated dataset, aligned element-for-element with the local
 Because events that emitted no photons are dropped, this must be built alongside the localizations rather than reconstructed afterwards.
 
 `u` is `NaN` on background columns: a spurious localization has no material coordinate, and a silent zero there would quietly corrupt any fit that used it.
+
+For a 2D truth (from [`project`](@ref)), `place(motion, u, t)` is the 3D structure point, and `position` its first two coordinates.
 """
-struct Truth{D,T,M,C<:AbstractVector{SVector{D,T}}}
+struct Truth{D,T,M,C<:AbstractVector{SVector{D,T}},U<:AbstractVector{SVector{3,T}}}
     position::C
-    u::C
+    u::U
     issignal::Vector{Bool}
     component::Vector{Int32}
     motion::M
@@ -116,8 +118,10 @@ function Truth{D,T}(
     length(issignal) == length(component) == size(position, 2) == size(u, 2) ||
         throw(DimensionMismatch("all columns must have the same length"))
     pc = columnview(position, Val(D))
-    uc = columnview(u, Val(D))
-    return Truth{D,T,typeof(motion),typeof(pc)}(pc, uc, issignal, component, motion)
+    uc = columnview(u, Val(3))
+    return Truth{D,T,typeof(motion),typeof(pc),typeof(uc)}(
+        pc, uc, issignal, component, motion
+    )
 end
 
 Base.length(tr::Truth) = length(tr.issignal)
@@ -154,6 +158,48 @@ function errors(locs::LocalizationTable{D,T}, tr::Truth{D,T}) where {D,T}
 end
 
 """
+    project(locs, truth) -> (locs2D, truth2D)
+    project(locs) -> locs2D
+    project(truth) -> truth2D
+
+A 2D dataset from a 3D simulation: the localizations and the truth with their z coordinates dropped, row for row. Positions and precisions keep x and y; times, photon counts, `issignal` and `component` are unchanged; the truth keeps its 3D material coordinates `u` and its `motion`.
+
+This is how SimSMLM makes 2D data: structures move and are imaged in 3D, and a 2D acquisition sees their lateral coordinates. In the model it is exact, not an approximation: each localization's error and blur are independent per axis, so dropping z leaves the 2D law with the same lateral precisions, and the projection of a background uniform in a [`FieldOfView`](@ref) is uniform in its xy rectangle. Out-of-focus effects are not modeled, so a 2D dataset contains every event however far from focus.
+
+```julia
+locs, truth = project(simulate(structure; kwargs...)...)
+```
+
+The results are copies, so editing them leaves the 3D data unchanged.
+"""
+function project(locs::LocalizationTable{3,T}) where {T}
+    return localizationtable(
+        positions(locs)[1:2, :],
+        precisions(locs)[1:2, :],
+        copy(locs.t),
+        copy(locs.nphotons),
+        Val(2),
+    )
+end
+
+function project(tr::Truth{3,T}) where {T}
+    return Truth{2,T}(
+        truepositions(tr)[1:2, :],
+        copy(_matrix(tr.u)),
+        copy(tr.issignal),
+        copy(tr.component),
+        tr.motion,
+    )
+end
+
+function project(locs::LocalizationTable{3}, tr::Truth{3})
+    length(locs) == length(tr) || throw(
+        DimensionMismatch("$(length(locs)) localizations vs $(length(tr)) truth entries"),
+    )
+    return project(locs), project(tr)
+end
+
+"""
     smaptable(locs)  -> NamedTuple of column vectors
     smaptable(truth) -> NamedTuple of column vectors
 
@@ -177,7 +223,7 @@ For the truth, a separate table with the same position names:
 | `is_signal` | `false` for a spurious localization |
 | `component` | which part of a [`Composite`](@ref) it came from, `0` for spurious |
 
-Row `i` of the truth table is the truth behind row `i` of the localization table. In 2D the `z` columns are left out.
+Row `i` of the truth table is the truth behind row `i` of the localization table. For 2D data (from [`project`](@ref)) the `z` columns are left out.
 
 A `NamedTuple` of vectors is a table to Tables.jl, so `CSV.write(path, smaptable(locs))` and `DataFrame(smaptable(truth))` work without SimSMLM depending on either. The columns are copies.
 """

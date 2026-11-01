@@ -1,34 +1,28 @@
 """
-    AbstractStructure{D}
+    AbstractStructure
 
 What [`simulate`](@ref) draws signal events from: a single [`Structure`](@ref), or a [`Composite`](@ref) of several.
 """
-abstract type AbstractStructure{D} end
-
-ndim(::AbstractStructure{D}) where {D} = D
+abstract type AbstractStructure end
 
 """
     Structure(shape, motion)
 
 A reference configuration paired with the deformation that carries it through time. `motion` may be any [`AbstractDeformation`](@ref); use [`Static`](@ref) for something that does not move.
 """
-struct Structure{D,S,M} <: AbstractStructure{D}
+struct Structure{S<:AbstractShape,M<:AbstractDeformation} <: AbstractStructure
     shape::S
     motion::M
 end
 
-function Structure(shape::AbstractShape{D}, motion::AbstractDeformation{D}) where {D}
-    return Structure{D,typeof(shape),typeof(motion)}(shape, motion)
-end
-
-Structure(shape::AbstractShape{D}) where {D} = Structure(shape, Static{D}())
+Structure(shape::AbstractShape) = Structure(shape, Static())
 
 """
     place(s::Structure, u, t)
 
 World position at time `t` of the material coordinate `u`.
 """
-@inline place(s::Structure{D}, u::SVector{D}, t::Real) where {D} = place(s.motion, u, t)
+@inline place(s::Structure, u::SVector{3}, t::Real) = place(s.motion, u, t)
 
 """
     Composite(structure => weight, ...)
@@ -40,9 +34,9 @@ Every component keeps its own shape and deformation, so parts can move independe
 ```julia
 # a ring with a bending cap 50 nm above it
 scr = Composite(
-    Structure(Ring{3}(), Similarity{3}(scale = 50.0)) => 0.4,
-    Structure(SphereSurface{3}(),
-              Similarity{3}(scale = 40.0, shift = SA[0.0, 0.0, 50.0]) ∘ Bend(t -> 0.1t)) => 0.6,
+    Structure(Ring(), Similarity(scale = 50.0)) => 0.4,
+    Structure(SphereSurface(),
+              Similarity(scale = 40.0, shift = SA[0.0, 0.0, 50.0]) ∘ Bend(t -> 0.1t)) => 0.6,
 )
 ```
 
@@ -50,7 +44,7 @@ Weights are fractions of *events*, not label densities: for an equal density acr
 
 In the [`Truth`](@ref), `component` says which component each localization came from, and `motion[k]` is component `k`'s deformation.
 """
-struct Composite{D,C<:Tuple{Vararg{Structure{D}}},K} <: AbstractStructure{D}
+struct Composite{C<:Tuple{Vararg{Structure}},K} <: AbstractStructure
     components::C
     cumweights::NTuple{K,Float64}   # normalised, so the last is 1
 
@@ -63,10 +57,7 @@ struct Composite{D,C<:Tuple{Vararg{Structure{D}}},K} <: AbstractStructure{D}
             throw(ArgumentError("weights must be finite and non-negative, got $w"))
         total = sum(w)
         total > 0 || throw(ArgumentError("weights must not all be zero"))
-        D = ndim(first(comps))
-        all(c -> ndim(c) == D, comps) ||
-            throw(DimensionMismatch("all components must have the same dimension"))
-        return new{D,typeof(comps),length(comps)}(comps, accumulate(+, w) ./ total)
+        return new{typeof(comps),length(comps)}(comps, accumulate(+, w) ./ total)
     end
 end
 
@@ -140,15 +131,10 @@ end
 ) where {T} = _sample_event(rng, s, t)
 
 @inline function _place_event(
-    rng::AbstractRNG,
-    s::AbstractStructure{D},
-    bg::Background{D},
-    issig::Bool,
-    t::Real,
-    ::Type{T},
-) where {D,T}
+    rng::AbstractRNG, s::AbstractStructure, bg::Background, issig::Bool, t::Real, ::Type{T}
+) where {T}
     issig && return _sample_event(rng, s, t)
-    nan = SVector{D,T}(ntuple(_ -> T(NaN), Val(D)))
+    nan = SVector{3,T}(T(NaN), T(NaN), T(NaN))
     return randin(rng, bg.fov), nan, Int32(0)
 end
 
@@ -179,7 +165,7 @@ Pass a [`Background`](@ref) to add spurious localizations. They come from the sa
 
 Localizations carry the exact event time rather than a frame index. Frames are recoverable afterwards if you ever want them — `floor.(locs.t ./ period) .+ 1`.
 
-Returns the localization table and the [`Truth`](@ref) aligned with it.
+Returns the localization table and the [`Truth`](@ref) aligned with it, both 3D. For a 2D dataset, pass them to [`project`](@ref).
 
 # Example
 ```julia
@@ -187,14 +173,14 @@ using SimSMLM, StaticArrays
 
 # a sphere growing from 100 nm at 20 nm/s, drifting along x at 10 nm/s
 sphere = Structure(
-    SphereSurface{3}(),
-    Similarity{3}(scale = t -> 100 + 20t, shift = t -> SA[10t, 0.0, 0.0]),
+    SphereSurface(),
+    Similarity(scale = t -> 100 + 20t, shift = t -> SA[10t, 0.0, 0.0]),
 )
 
 locs, truth = simulate(sphere;
     emis_rate = 200.0,
     t_end     = 10.0,
-    optics    = Optics(uncertainty = ShotNoise{3}(120.0),
+    optics    = Optics(uncertainty = ShotNoise(120.0),
                        brightness = 5000.0, ontime = 0.01),
     background = Background(rate = 20.0, meanphotons = 200.0,
                             fov = FieldOfView(SA[-500.0, -500, -500],
@@ -206,14 +192,14 @@ nbackground(truth) / length(truth)   # spurious fraction
 """
 function simulate(
     rng::AbstractRNG,
-    s::AbstractStructure{D};
+    s::AbstractStructure;
     emis_rate::Real,
-    optics::Optics{D,T},
+    optics::Optics{T},
     t_end::Union{Nothing,Real}=nothing,
     nevents::Union{Nothing,Integer}=nothing,
-    background::Union{Nothing,Background{D}}=nothing,
+    background::Union{Nothing,Background}=nothing,
     blur::Real=0.0,
-) where {D,T}
+) where {T}
     (t_end === nothing) == (nevents === nothing) &&
         throw(ArgumentError("pass exactly one of `t_end` or `nevents`"))
     isfinite(blur) && blur >= 0 ||
@@ -235,12 +221,12 @@ function simulate(
     keep = findall(!iszero, counts)
     n = length(keep)
 
-    pos = Matrix{T}(undef, D, n)
-    prec = Matrix{T}(undef, D, n)
+    pos = Matrix{T}(undef, 3, n)
+    prec = Matrix{T}(undef, 3, n)
     ts = Vector{T}(undef, n)
     nphot = Vector{Int32}(undef, n)
-    truepos = Matrix{T}(undef, D, n)
-    us = Matrix{T}(undef, D, n)
+    truepos = Matrix{T}(undef, 3, n)
+    us = Matrix{T}(undef, 3, n)
     comp = Vector{Int32}(undef, n)
 
     # positions are drawn only for survivors — a dropped event never needed one
@@ -251,9 +237,9 @@ function simulate(
         σ = uncertainty(optics.uncertainty, N)
         # The emitter's offset from the structure and the localization error are independent Gaussians, so one draw with their summed variance has the law of both (@eq-blur). Without a blur the draw is the one it always was, so existing seeds reproduce existing data.
         spread = β² > 0 && issignal[k] ? sqrt.(σ .^ 2 .+ β²) : σ
-        v = x .+ spread .* randn(rng, SVector{D,T})
+        v = x .+ spread .* randn(rng, SVector{3,T})
 
-        for d in 1:D
+        for d in 1:3
             pos[d, i] = v[d]
             prec[d, i] = σ[d]
             truepos[d, i] = x[d]
@@ -264,8 +250,8 @@ function simulate(
         comp[i] = c
     end
 
-    locs = localizationtable(pos, prec, ts, nphot, Val(D))
-    truth = Truth{D,T}(truepos, us, issignal[keep], comp, _motion(s))
+    locs = localizationtable(pos, prec, ts, nphot, Val(3))
+    truth = Truth{3,T}(truepos, us, issignal[keep], comp, _motion(s))
     return locs, truth
 end
 

@@ -1,17 +1,17 @@
 """
-    AbstractShape{D}
+    AbstractShape
 
 A reference configuration to draw label sites from. Subtypes implement
 
-    sample_site(rng, shape) -> SVector{D,T}
+    sample_site(rng, shape) -> SVector{3,T}
 
 One site is drawn per emission event, so `sample_site` is the primitive and `sample_sites` is a convenience wrapper over it. Shapes are conventionally defined at unit size so that a deformation's `scale` sets the physical dimensions.
 
 Sampling a fresh site per event makes labels a continuous density over the structure rather than a fixed set of discrete points.
-"""
-abstract type AbstractShape{D} end
 
-ndim(::AbstractShape{D}) where {D} = D
+Shapes are 3D, like the deformations that move them; a 2D dataset is the projection of a 3D one (see [`project`](@ref)).
+"""
+abstract type AbstractShape end
 
 """
     sample_site([rng], shape) -> SVector
@@ -36,72 +36,67 @@ sample_sites(shape::AbstractShape, n::Integer) = sample_sites(default_rng(), sha
 # ---------------------------------------------------------------------------
 
 """
-    SphereSurface{D}()
+    SphereSurface()
 
-Uniform points on the unit sphere (`D=3`) or unit circle (`D=2`).
+Uniform points on the unit sphere.
 """
-struct SphereSurface{D} <: AbstractShape{D} end
+struct SphereSurface <: AbstractShape end
 
-SphereSurface(D::Integer) = SphereSurface{Int(D)}()
-
-@inline sample_site(rng::AbstractRNG, ::SphereSurface{D}) where {D} =
-    normalize(randn(rng, SVector{D,Float64}))
+@inline sample_site(rng::AbstractRNG, ::SphereSurface) =
+    normalize(randn(rng, SVector{3,Float64}))
 
 """
-    Ball{D}()
+    Ball()
 
 Uniform points inside the unit ball.
 """
-struct Ball{D} <: AbstractShape{D} end
+struct Ball <: AbstractShape end
 
-Ball(D::Integer) = Ball{Int(D)}()
-
-@inline sample_site(rng::AbstractRNG, ::Ball{D}) where {D} =
-    normalize(randn(rng, SVector{D,Float64})) * rand(rng)^(1 / D)
+@inline sample_site(rng::AbstractRNG, ::Ball) =
+    normalize(randn(rng, SVector{3,Float64})) * rand(rng)^(1 / 3)
 
 """
-    Ring{D}()
+    Ring()
 
-Uniform points on the unit circle lying in the xy-plane. For `D=3` the third coordinate is zero, which makes it the reference configuration for a ring seen in a 3D dataset.
-
-In the plane `Ring{2}()` and `SphereSurface{2}()` are the same distribution — the unit circle *is* the unit sphere there. They differ from `D = 3` up, where a ring is a curve and a sphere surface is a surface.
+Uniform points on the unit circle in the xy-plane (`z = 0`). A `Similarity`'s `rot` tilts it.
 """
-struct Ring{D} <: AbstractShape{D} end
+struct Ring <: AbstractShape end
 
-Ring(D::Integer) = Ring{Int(D)}()
-
-@inline function sample_site(rng::AbstractRNG, ::Ring{D}) where {D}
+@inline function sample_site(rng::AbstractRNG, ::Ring)
     φ = 2π * rand(rng)
-    xyz = (cos(φ), sin(φ), 0.0)
-    return SVector{D,Float64}(ntuple(i -> xyz[i], Val(D)))
+    return SVector(cos(φ), sin(φ), 0.0)
 end
 
 """
     LineSegment(a, b)
 
-Uniform points on the segment from `a` to `b`.
+Uniform points on the segment from `a` to `b`, two 3-vectors.
 """
-struct LineSegment{D,T} <: AbstractShape{D}
-    a::SVector{D,T}
-    b::SVector{D,T}
+struct LineSegment{T} <: AbstractShape
+    a::SVector{3,T}
+    b::SVector{3,T}
 end
 
 function LineSegment(a::AbstractVector, b::AbstractVector)
-    return LineSegment(SVector{length(a),Float64}(a), SVector{length(b),Float64}(b))
+    length(a) == length(b) == 3 || throw(
+        DimensionMismatch(
+            "LineSegment needs two 3-vectors, got lengths $(length(a)) and $(length(b))"
+        ),
+    )
+    return LineSegment(SVector{3,Float64}(a), SVector{3,Float64}(b))
 end
 
-@inline sample_site(rng::AbstractRNG, s::LineSegment{D}) where {D} =
-    s.a .+ rand(rng) .* (s.b .- s.a)
+@inline sample_site(rng::AbstractRNG, s::LineSegment) = s.a .+ rand(rng) .* (s.b .- s.a)
 
 """
     PointCloud(pts)
 
-An explicit reference configuration: wrap a `D × N` matrix or a vector of static vectors. Sampling draws one of the points uniformly at random, so a point cloud behaves like any other shape — use it when you have model points rather than a parametric form.
+An explicit reference configuration: wrap a `3 × N` matrix or a vector of 3-vectors. Sampling draws one of the points uniformly at random, so a point cloud behaves like any other shape — use it when you have model points rather than a parametric form.
 
 With a fresh draw per event, the same point can be selected repeatedly, which is the discrete analogue of a label emitting more than once.
 """
-struct PointCloud{D,T} <: AbstractShape{D}
-    pts::Vector{SVector{D,T}}
+struct PointCloud{T} <: AbstractShape
+    pts::Vector{SVector{3,T}}
 end
 
 PointCloud(pts::AbstractMatrix{<:Real}) = PointCloud(tosites(pts))
@@ -112,13 +107,13 @@ PointCloud(pts::AbstractMatrix{<:Real}) = PointCloud(tosites(pts))
 # ---------------------------------------------------------------------------
 
 """
-    tosites(pts) -> Vector{SVector{D,T}}
+    tosites(pts) -> Vector{SVector{3,T}}
 
-Convert a `D × N` matrix of points into static vectors. Accepts a vector of static vectors unchanged, so callers can take either form.
+Convert a `3 × N` matrix of points into static vectors. Accepts a vector of 3-vectors unchanged, so callers can take either form.
 """
 function tosites(pts::AbstractMatrix{T}) where {T<:Real}
-    D = size(pts, 1)
-    return [SVector{D,float(T)}(view(pts, :, j)) for j in axes(pts, 2)]
+    size(pts, 1) == 3 || throw(DimensionMismatch("expected 3 rows, got $(size(pts, 1))"))
+    return [SVector{3,float(T)}(view(pts, :, j)) for j in axes(pts, 2)]
 end
 
-tosites(pts::AbstractVector{<:SVector}) = collect(pts)
+tosites(pts::AbstractVector{<:SVector{3}}) = collect(pts)
