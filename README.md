@@ -95,7 +95,7 @@ For partial labeling, keep a random subset of the points: `PointCloud(pts[:, ran
 - **2D data**: everything is simulated in 3D; `project(locs, truth)` drops z for a 2D dataset
 - **Export**: `smaptable` — flat columns with SMAPpy's names (`x_nm`, `xy_err_nm`, `photons`, `time_s`, …) that `CSV.write` or `DataFrame` take directly; the truth exports as its own table
 
-Any model field accepts either a constant or a function of time, resolved by `at(p, t)`. Structs are parametric on those field types so the call inlines; the whole pipeline is type-stable and runs ~10⁷ localizations/s.
+Any model field accepts either a constant or a function of time, resolved by `at(p, t)`. Structs are parametric on those field types so the call inlines; the whole pipeline is type-stable and simulates 10⁷ events in about 0.4 s (M1 Pro).
 
 ## Further reading
 

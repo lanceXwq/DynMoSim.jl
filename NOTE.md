@@ -46,7 +46,7 @@ N | T ~ Poisson(hT),  T ~ Exponential(τ)   ⟹   N ~ Geometric(1/(1+hτ)),  E[N
 
 So the ON duration never has to be sampled — one draw per event, not two. The race interpretation makes it obvious: emission and switch-off compete at rates `h` and `1/τ`, and `N` counts the emissions that win before the switch-off. See `derivations/derivation.qmd`.
 
-That marginal puts mass `p = 1/(1+hτ)` on `N = 0`. An event that emits no detected photons leaves nothing to fit, so it is dropped — not as a tunable threshold, but because there is no localization to report. `rate` therefore counts **emission events**, and a fraction `p` of them leave no trace.
+That marginal puts mass `p = 1/(1+hτ)` on `N = 0`. An event that emits no detected photons leaves nothing to fit, so it is dropped — not as a tunable threshold, but because there is no localization to report. `emis_rate` therefore counts **emission events**, and a fraction `p` of them leave no trace.
 
 The rows that survive follow the law conditioned on `N ≥ 1`:
 
@@ -94,7 +94,7 @@ Implementation notes:
 - **Constant event rate.** A cap growing at constant curvature keeps the same total event rate, so it does not gain labels: its label density falls as `1/A(t)`. Time-varying rates were removed from DynMoSim deliberately, so this is accepted rather than fixed.
 - **Relation to the fitters.** Simulated ground truth maps one-to-one onto the fitted cap parameters:
   - DynMoFit: this is the constant-area map of `DynMoFit.jl/derivations/derivation.qmd`. Its unit lattice is centred at `(0, 0, -1)`, so its depth is `-z` where DynMoSim's is `1 - u_z`. Its cap `(κ, scale, normal n, apex a)` is `Similarity(scale = scale, rot = rotation(n), shift = a) ∘ Bend(κ)`.
-  - LocMoFit: its `SphericalCap` with curvature `c`, half-angle `α`, orientation `(θ, ϕ)` and apex `(x, y, z)` is `Similarity(scale = sin(α/2) / c, rot = rotation(n), shift = SA[x, y, z]) ∘ Bend(sin(α/2))` with `n = (sin θ cos ϕ, sin θ sin ϕ, cos θ)`. For the same material points the two agree point for point, to rounding (checked to 2e-13).
+  - LocMoFit: its `SphericalCap` with scale `s`, `eta`, orientation `(theta, phi)` and apex `(x, y, z)` is `Similarity(scale = s, rot = rotation(n), shift = SA[x, y, z]) ∘ Bend(tanh(eta))` with `n = (sin θ cos ϕ, sin θ sin ϕ, cos θ)`: LocMoFit's κ′ = tanh(eta) is `Bend`'s κ. For the same material points the two agree point for point, to rounding (checked 2026-11-01 against LocMoFit.jl's `local_points` and `rotmat`: 8e-14 nm over 20 random caps).
 - **`rotation(n)`** is the shortest rotation taking `+z` onto `n`, about `ẑ × n` — the convention of LocMoFit's `rotmat(θ, ϕ)` and DynMoFit's `rotation_matrix(n)`. It goes through Rodrigues with the angle `atan(sin θ, cos θ)`, which stays accurate at both poles; DynMoFit's closed form divides by `1 + n_z`. At `n = -ẑ` the axis is undefined and `+y` is used, matching LocMoFit's `rotmat(π, 0)`.
 - **Numerics.**
   - `normalize(randn(...))` can give `|u_z|` a rounding error above 1, which would make `h(2 - κ²h)` slightly negative; `h` is clamped to `[0, 2]`.
@@ -125,7 +125,7 @@ truth.motion[truth.component[i]]   # the deformation that placed row i
 It implements the splitting of `@eq-thinning`: for each signal event, one uniform draw against the normalised cumulative weights picks the component, which then samples and places the event exactly as a `Structure` would. The photon and precision stages never look at the component, so a composite is identical in law to its components simulated at `π_k · emis_rate` and merged.
 
 - **Weights** are fractions of *events*, not label densities: for an equal density, make them proportional to each component's length or area. They are constant, so if a component's size changes over time, its share of events does not.
-- **Type stability.** Components are kept in a `Tuple`, and `_pick` recurses on `Base.tail`, so every branch has a concrete type even when components mix shape and deformation types. Measured at 10⁷ events: 0.77 s against 0.68 s for a plain `Structure`, with the same 52 allocations; the hot loop stays allocation-free.
+- **Type stability.** Components are kept in a `Tuple`, and `_pick` recurses on `Base.tail`, so every branch has a concrete type even when components mix shape and deformation types. Measured at 10⁷ events, a composite takes about 13% longer than a plain `Structure`, with the same number of allocations; the hot loop stays allocation-free.
 - **No nesting.** Components must be `Structure`s, not other `Composite`s, so `truth.component[i]` names the deformation that placed row `i` unambiguously. A nested composite can be flattened by multiplying the weights.
 - **`Truth`.** `component` is `1` throughout for a plain `Structure` and `0` for background rows. `motion` is the structure's deformation for a `Structure` and a tuple of the components' deformations for a `Composite`.
 - **Random stream.** A composite uses one extra uniform per signal event. A plain `Structure` consumes exactly the draws it did before `Composite` existed, so existing seeds reproduce existing data.

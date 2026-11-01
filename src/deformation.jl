@@ -3,7 +3,7 @@
 
 A map from *material* coordinates to *world* coordinates at a given time.
 
-A label is sampled once onto a reference configuration and keeps its material coordinate `u` forever; the deformation is what moves it. This Lagrangian split is what makes a moving structure coherent — the same physical label reappears at successive times, rather than being resampled into an unrelated spot.
+A material coordinate `u` names a point of the reference configuration, and the deformation pushes it forward to its world position at time `t`. Each event draws a fresh `u`, so there is no persistent label on a continuous shape; a [`PointCloud`](@ref) of fixed sites gives labels that recur, each moving with the structure.
 
 Subtypes implement:
 

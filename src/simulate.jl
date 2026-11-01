@@ -18,13 +18,6 @@ end
 Structure(shape::AbstractShape) = Structure(shape, Static())
 
 """
-    place(s::Structure, u, t)
-
-World position at time `t` of the material coordinate `u`.
-"""
-@inline place(s::Structure, u::SVector{3}, t::Real) = place(s.motion, u, t)
-
-"""
     Composite(structure => weight, ...)
 
 Several structures imaged together. Each signal event comes from component `k` with probability `weight[k] / sum(weight)`, so a composite is the same as its components simulated at those fractions of `emis_rate` and merged.
@@ -85,16 +78,6 @@ end
 _motion(s::Structure) = s.motion
 _motion(c::Composite) = map(x -> x.motion, c.components)
 
-"""
-    sample_position([rng], s::AbstractStructure, t) -> SVector
-
-Draw one position from the structure as it stands at time `t`: a material coordinate from the reference shape, pushed forward by the deformation. For a [`Composite`](@ref), the component is drawn first.
-"""
-@inline sample_position(rng::AbstractRNG, s::AbstractStructure, t::Real) =
-    first(_sample_event(rng, s, t))
-
-sample_position(s::AbstractStructure, t::Real) = sample_position(default_rng(), s, t)
-
 # ---------------------------------------------------------------------------
 
 # Stage 2: signal or background, for every event. With no background there is nothing to decide.
@@ -145,7 +128,7 @@ Simulate an SMLM acquisition of a moving structure — a [`Structure`](@ref), or
 
 The pipeline is four batched stages, in order:
 
-1. all event times, from a Poisson process of rate `emis_rate`;
+1. all event times, from a Poisson process of rate `emis_rate`, plus `background.rate` with a background;
 2. all event types — signal or background — from one Bernoulli draw;
 3. all photon counts, each from the distribution its type calls for;
 4. events that emitted no photons are dropped, and the survivors are localized, a signal event with the blur added.

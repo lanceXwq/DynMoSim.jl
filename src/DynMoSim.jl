@@ -44,7 +44,7 @@ export AbstractUncertainty, ShotNoise, StallingaRieger, GaussianMask
 export Optics, uncertainty, psfwidths, meanphotons, photondist
 
 # pipeline
-export AbstractStructure, Structure, Composite, simulate, sample_position, ndim
+export AbstractStructure, Structure, Composite, simulate
 
 include("timevarying.jl")
 include("types.jl")

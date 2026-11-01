@@ -115,7 +115,7 @@ rng() = StableRNG(20260905)
 
         b = sample_sites(r, Ball(), 2000)
         @test all(x -> norm(x) <= 1.0 + 1e-12, b)
-        # uniform in the ball => E[r] = D/(D+1)
+        # uniform in the ball => E[r] = 3/4
         @test mean(norm, b) ≈ 3 / 4 rtol = 0.03
 
         ring = sample_sites(r, Ring(), 2000)
@@ -242,7 +242,6 @@ rng() = StableRNG(20260905)
         # λ·T events, of which a fraction p = 1/(1+hτ) emit nothing and are cut
         p0 = 1 / (1 + 1e5 * 0.01)
         @test length(locs) ≈ 2000 * 50 * (1 - p0) rtol = 0.02
-        @test all(>=(1), locs.nphotons)          # zeros never reach the table
         @test all(isfinite, precisions(locs))
         @test mean(locs.nphotons) ≈ 1 + 1e5 * 0.01 rtol = 0.02
 
@@ -252,7 +251,10 @@ rng() = StableRNG(20260905)
         rad = norm.(locs.position)
         @test median(rad) ≈ 100.0 rtol = 0.02
         @test mean(rad) > median(rad)
-        @test count(<(10), locs.nphotons) / length(locs) < 0.02
+        # the surviving counts follow the geometric law conditioned on N ≥ 1, so P(N < 10) = 1 - (1-p)^9
+        q = 1 - (1 - p0)^9
+        @test count(<(10), locs.nphotons) / length(locs) ≈ q atol =
+            4 * sqrt(q * (1 - q) / length(locs))
 
         # residuals normalised by the reported precision are standard normal
         z = errors(locs, truth) ./ precisions(locs)
@@ -639,14 +641,15 @@ rng() = StableRNG(20260905)
 
     @testset "nevents and t_end are exclusive" begin
         sphere = Structure(SphereSurface(), Similarity(scale=100.0))
-        opt = Optics(uncertainty=ShotNoise(120.0), brightness=1e6, ontime=0.01)
+        # 3 photons per event on average, so a quarter of the events emit nothing
+        opt = Optics(uncertainty=ShotNoise(120.0), brightness=300.0, ontime=0.01)
         kw = (emis_rate=(1000.0), optics=opt)
 
-        # nevents counts events; the zero-photon fraction trims the yield
+        # nevents counts events; the zero-photon fraction p = 1/(1+hτ) trims the yield
         locs, truth = simulate(rng(), sphere; nevents=20_000, kw...)
         @test length(locs) == length(truth)
         @test length(locs) <= 20_000
-        @test length(locs) / 20_000 ≈ 1 - 1 / (1 + 1e6 * 0.01) rtol = 0.01
+        @test length(locs) / 20_000 ≈ 3 / 4 atol = 4 * sqrt(3 / 16 / 20_000)
         @test all(>=(1), locs.nphotons)
         @test all(isfinite, precisions(locs))
 

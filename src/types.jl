@@ -30,7 +30,6 @@ function columnview(m::Matrix{T}, ::Val{D}) where {D,T}
 end
 
 # The matrix underneath a column of points, however that column is stored.
-_matrix(c::Base.ReinterpretArray) = parent(c)
 _matrix(c::AbstractVector{SVector{D,T}}) where {D,T} = reinterpret(reshape, T, c)
 
 """
@@ -81,8 +80,6 @@ The contiguous matrix underlying the precision column. See [`positions`](@ref).
 """
 precisions(l::LocalizationTable) = _matrix(l.precision)
 
-ndim(::LocalizationTable{D}) where {D} = D
-
 """
     Truth{D,T,M,C,U}
 
@@ -125,10 +122,7 @@ function Truth{D,T}(
 end
 
 Base.length(tr::Truth) = length(tr.issignal)
-Base.firstindex(::Truth) = 1
-Base.lastindex(tr::Truth) = length(tr)
 Base.eachindex(tr::Truth) = Base.OneTo(length(tr))
-ndim(::Truth{D}) where {D} = D
 
 """
     nsignal(truth), nbackground(truth)
