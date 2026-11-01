@@ -1,4 +1,4 @@
-name = "SimSMLM"
+name = "DynMoSim"
 uuid = "796d5d8c-d7ba-4cfb-999b-97f9cefc3458"
 version = "1.0.0-DEV"
 authors = ["Lance (Weiqing) Xu <lance.xwq@gmail.com> and contributors"]

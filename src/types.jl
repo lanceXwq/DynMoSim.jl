@@ -164,7 +164,7 @@ end
 
 A 2D dataset from a 3D simulation: the localizations and the truth with their z coordinates dropped, row for row. Positions and precisions keep x and y; times, photon counts, `issignal` and `component` are unchanged; the truth keeps its 3D material coordinates `u` and its `motion`.
 
-This is how SimSMLM makes 2D data: structures move and are imaged in 3D, and a 2D acquisition sees their lateral coordinates. In the model it is exact, not an approximation: each localization's error and blur are independent per axis, so dropping z leaves the 2D law with the same lateral precisions, and the projection of a background uniform in a [`FieldOfView`](@ref) is uniform in its xy rectangle. Out-of-focus effects are not modeled, so a 2D dataset contains every event however far from focus.
+This is how DynMoSim makes 2D data: structures move and are imaged in 3D, and a 2D acquisition sees their lateral coordinates. In the model it is exact, not an approximation: each localization's error and blur are independent per axis, so dropping z leaves the 2D law with the same lateral precisions, and the projection of a background uniform in a [`FieldOfView`](@ref) is uniform in its xy rectangle. Out-of-focus effects are not modeled, so a 2D dataset contains every event however far from focus.
 
 ```julia
 locs, truth = project(simulate(structure; kwargs...)...)
@@ -225,7 +225,7 @@ For the truth, a separate table with the same position names:
 
 Row `i` of the truth table is the truth behind row `i` of the localization table. For 2D data (from [`project`](@ref)) the `z` columns are left out.
 
-A `NamedTuple` of vectors is a table to Tables.jl, so `CSV.write(path, smaptable(locs))` and `DataFrame(smaptable(truth))` work without SimSMLM depending on either. The columns are copies.
+A `NamedTuple` of vectors is a table to Tables.jl, so `CSV.write(path, smaptable(locs))` and `DataFrame(smaptable(truth))` work without DynMoSim depending on either. The columns are copies.
 """
 function smaptable(locs::LocalizationTable{D,T}) where {D,T}
     D in (2, 3) || throw(ArgumentError("smaptable needs D = 2 or 3, got D = $D"))

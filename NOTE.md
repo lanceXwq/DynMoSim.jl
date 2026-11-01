@@ -1,6 +1,6 @@
 # Notes
 
-The details behind the README: the model SimSMLM simulates, what it deliberately leaves out, and how it is implemented. The maths is in `derivations/derivation.qmd`, which holds maths only; anything about the code belongs here or in comments next to it.
+The details behind the README: the model DynMoSim simulates, what it deliberately leaves out, and how it is implemented. The maths is in `derivations/derivation.qmd`, which holds maths only; anything about the code belongs here or in comments next to it.
 
 ## Model
 
@@ -91,9 +91,9 @@ Every material point keeps the area above it, so labels stay uniform on the cap 
 
 Implementation notes:
 
-- **Constant event rate.** A cap growing at constant curvature keeps the same total event rate, so it does not gain labels: its label density falls as `1/A(t)`. Time-varying rates were removed from SimSMLM deliberately, so this is accepted rather than fixed.
+- **Constant event rate.** A cap growing at constant curvature keeps the same total event rate, so it does not gain labels: its label density falls as `1/A(t)`. Time-varying rates were removed from DynMoSim deliberately, so this is accepted rather than fixed.
 - **Relation to the fitters.** Simulated ground truth maps one-to-one onto the fitted cap parameters:
-  - DynMoFit: this is the constant-area map of `DynMoFit.jl/derivations/derivation.qmd`. Its unit lattice is centred at `(0, 0, -1)`, so its depth is `-z` where SimSMLM's is `1 - u_z`. Its cap `(κ, scale, normal n, apex a)` is `Similarity(scale = scale, rot = rotation(n), shift = a) ∘ Bend(κ)`.
+  - DynMoFit: this is the constant-area map of `DynMoFit.jl/derivations/derivation.qmd`. Its unit lattice is centred at `(0, 0, -1)`, so its depth is `-z` where DynMoSim's is `1 - u_z`. Its cap `(κ, scale, normal n, apex a)` is `Similarity(scale = scale, rot = rotation(n), shift = a) ∘ Bend(κ)`.
   - LocMoFit: its `SphericalCap` with curvature `c`, half-angle `α`, orientation `(θ, ϕ)` and apex `(x, y, z)` is `Similarity(scale = sin(α/2) / c, rot = rotation(n), shift = SA[x, y, z]) ∘ Bend(sin(α/2))` with `n = (sin θ cos ϕ, sin θ sin ϕ, cos θ)`. For the same material points the two agree point for point, to rounding (checked to 2e-13).
 - **`rotation(n)`** is the shortest rotation taking `+z` onto `n`, about `ẑ × n` — the convention of LocMoFit's `rotmat(θ, ϕ)` and DynMoFit's `rotation_matrix(n)`. It goes through Rodrigues with the angle `atan(sin θ, cos θ)`, which stays accurate at both poles; DynMoFit's closed form divides by `1 + n_z`. At `n = -ẑ` the axis is undefined and `+y` is used, matching LocMoFit's `rotmat(π, 0)`.
 - **Numerics.**
@@ -152,7 +152,7 @@ Iterating rows, iterating the point column, and scanning the raw matrix all allo
 - **Time.** SMAP and SMAPpy tables count `frame`s. The exact event time goes in `time_s`, SMAPpy's name for a time in seconds. Never `t`: SMAPpy's CSV reader maps a column named `t` to `frame`.
 - **Truth is its own table.** As in SMAPpy, where the true spots are a second table compared against the localizations, the truth uses the same position names `x_nm`, `y_nm`, `z_nm`, plus `is_signal` and `component`. Row `i` is the truth behind localization `i`, so the two tables join by row; times live in the localization table only.
 - **Naming, not compatibility.** The names follow SMAPpy's conventions; exports are not tested against SMAPpy's CSV reader, which is still incomplete.
-- **No dependency.** A `NamedTuple` of vectors is a Tables.jl table by definition, so `CSV.write` and `DataFrame` accept it while SimSMLM depends on neither. Julia code downstream does not need it at all: `positions(locs)` and `precisions(locs)` are already the `D×N` matrices the fitters take.
+- **No dependency.** A `NamedTuple` of vectors is a Tables.jl table by definition, so `CSV.write` and `DataFrame` accept it while DynMoSim depends on neither. Julia code downstream does not need it at all: `positions(locs)` and `precisions(locs)` are already the `D×N` matrices the fitters take.
 - **Copies.** The columns are fresh vectors (row slices of the `D×N` storage), so editing an exported table never changes the simulation.
 
 ## 2D data: `project`

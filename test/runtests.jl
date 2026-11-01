@@ -1,4 +1,4 @@
-using SimSMLM
+using DynMoSim
 using Test
 using StableRNGs
 using StaticArrays
@@ -10,7 +10,7 @@ using Random: randexp
 # StableRNGs rather than a seeded default RNG: Julia does not guarantee its default random stream across minor versions, so statistical assertions written against it would break on upgrade for no good reason.
 rng() = StableRNG(20260905)
 
-@testset "SimSMLM.jl" begin
+@testset "DynMoSim.jl" begin
     @testset "time-varying parameters" begin
         @test at(3.0, 1.0) == 3.0
         @test at(t -> 2t, 4.0) == 8.0

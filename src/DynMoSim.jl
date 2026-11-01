@@ -1,5 +1,5 @@
 """
-    SimSMLM
+    DynMoSim
 
 Simulation of single-molecule localization microscopy datasets from **moving** structures.
 
@@ -9,7 +9,7 @@ The deformation is the piece that makes this a simulation of a moving structure 
 
 See [`simulate`](@ref) for the entry point.
 """
-module SimSMLM
+module DynMoSim
 
 using Random: AbstractRNG, default_rng, randexp
 using LinearAlgebra: I, UniformScaling, normalize

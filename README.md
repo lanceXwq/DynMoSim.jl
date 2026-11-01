@@ -1,15 +1,15 @@
-# SimSMLM
+# DynMoSim
 
 A Julia repository for simulating some SMLM data. Not for production, just to produce proof-of-concept tests for LocMoFit and DynMoFit.
 
 What makes it different from other SMLM simulators is that the structure is allowed to **move** — a sphere whose centre translates and whose radius grows, say.
 
-[![Build Status](https://github.com/lancexwq/SimSMLM.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/lancexwq/SimSMLM.jl/actions/workflows/CI.yml?query=branch%3Amain)
+[![Build Status](https://github.com/lancexwq/DynMoSim.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/lancexwq/DynMoSim.jl/actions/workflows/CI.yml?query=branch%3Amain)
 
 ## Example
 
 ```julia
-using SimSMLM, StaticArrays
+using DynMoSim, StaticArrays
 
 # a sphere growing from 100 nm at 20 nm/s, drifting along x at 10 nm/s
 sphere = Structure(

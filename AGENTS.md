@@ -4,13 +4,13 @@ Guidance for AI coding agents working in this repository. Workspace-wide rules (
 
 ## What this is
 
-**SimSMLM.jl** simulates single-molecule localization microscopy (SMLM) datasets from **moving** structures. For example, a sphere whose center drifts and whose radius grows, or a spherical cap with a drifting center and a changing curvature. It exists to produce test data for the fitting packages LocMoFit and DynMoFit, so it must be **accurate enough to test them**: its output must follow the stated model closely enough that a fit failing on SimSMLM data points to the fitter, not the simulator. It is not production software, and the owner values a small codebase over features: do not add capabilities that were not asked for.
+**DynMoSim.jl** simulates single-molecule localization microscopy (SMLM) datasets from **moving** structures. For example, a sphere whose center drifts and whose radius grows, or a spherical cap with a drifting center and a changing curvature. It exists to produce test data for the fitting packages LocMoFit and DynMoFit, so it must be **accurate enough to test them**: its output must follow the stated model closely enough that a fit failing on DynMoSim data points to the fitter, not the simulator. It is not production software, and the owner values a small codebase over features: do not add capabilities that were not asked for.
 
 ## Commands
 
 ```sh
 julia --project=. -e 'using Pkg; Pkg.test()'        # full suite, ~5 s, must pass
-julia --project=. -e 'using SimSMLM'                 # quick load check
+julia --project=. -e 'using DynMoSim'                 # quick load check
 ```
 
 CI and `[compat]` target Julia 1.13 only (see Compatibility in `../AGENTS.md`); no need to keep compatibility with older versions.
@@ -19,7 +19,7 @@ CI and `[compat]` target Julia 1.13 only (see Compatibility in `../AGENTS.md`); 
 
 | Path | Contents |
 |---|---|
-| `src/SimSMLM.jl` | Module: `using` lines, all exports, `include` order |
+| `src/DynMoSim.jl` | Module: `using` lines, all exports, `include` order |
 | `src/timevarying.jl` | `at(p, t)` — any parameter may be a constant or a function of time |
 | `src/types.jl` | `Localization`, `LocalizationTable`, `Truth` (incl. `component`), `columnview`, accessors, `project` (3D → 2D), `smaptable` (export with SMAPpy column names) |
 | `src/deformation.jl` | `place(d, u, t)`: `Static`, `Similarity`, `Drift`, `Bend` (constant-area cap), `Composed` (`∘`), `rotation` |
@@ -30,7 +30,7 @@ CI and `[compat]` target Julia 1.13 only (see Compatibility in `../AGENTS.md`); 
 | `src/simulate.jl` | `AbstractStructure`, `Structure`, `Composite`, and the `simulate` pipeline |
 | `test/runtests.jl` | Single file, one `@testset` per concern |
 | `derivations/derivation.qmd` | The owner's derivations (gitignored): photon and precision models, the constant-area cap map, Poisson splitting. **Math only** — no code, no references to the implementation. All math should be checked there first. If new math is added, notes must be created there. |
-| `README.md` | Quick start only: what SimSMLM is, the main example, short cap/composite and point-cloud examples, the building blocks. Keep it short; details go in `NOTE.md`. |
+| `README.md` | Quick start only: what DynMoSim is, the main example, short cap/composite and point-cloud examples, the building blocks. Keep it short; details go in `NOTE.md`. |
 | `NOTE.md` | Everything behind the README: the model and its assumptions, background, photon count, caps, composites, storage, and implementation notes (how the derivations map onto the code, numerical guards, design decisions and their measured cost). Discuss implementation here or in source comments, never in `derivations/`. |
 | `papers/` | Reference PDFs (gitignored) |
 

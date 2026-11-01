@@ -169,7 +169,7 @@ Returns the localization table and the [`Truth`](@ref) aligned with it, both 3D.
 
 # Example
 ```julia
-using SimSMLM, StaticArrays
+using DynMoSim, StaticArrays
 
 # a sphere growing from 100 nm at 20 nm/s, drifting along x at 10 nm/s
 sphere = Structure(
