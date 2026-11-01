@@ -15,8 +15,6 @@ struct Structure{S<:AbstractShape,M<:AbstractDeformation} <: AbstractStructure
     motion::M
 end
 
-Structure(shape::AbstractShape) = Structure(shape, Static())
-
 """
     Composite(structure => weight, ...)
 
@@ -239,18 +237,3 @@ function simulate(
 end
 
 simulate(s::AbstractStructure; kwargs...) = simulate(default_rng(), s; kwargs...)
-
-"""
-    simulate([rng], shape, motion; kwargs...)
-
-Convenience form that builds the [`Structure`](@ref) for you.
-"""
-function simulate(
-    rng::AbstractRNG, shape::AbstractShape, motion::AbstractDeformation; kwargs...
-)
-    return simulate(rng, Structure(shape, motion); kwargs...)
-end
-
-function simulate(shape::AbstractShape, motion::AbstractDeformation; kwargs...)
-    return simulate(default_rng(), Structure(shape, motion); kwargs...)
-end

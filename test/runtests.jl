@@ -134,16 +134,17 @@ rng() = StableRNG(20260905)
         @test all(x -> x[1] ≈ x[2] && x[3] ≈ 2x[1], seg)
 
         M = [1.0 2.0 3.0; 4.0 5.0 6.0; 7.0 8.0 9.0]
-        @test tosites(M) == [SA[1.0, 4.0, 7.0], SA[2.0, 5.0, 8.0], SA[3.0, 6.0, 9.0]]
+        @test DynMoSim.tosites(M) ==
+            [SA[1.0, 4.0, 7.0], SA[2.0, 5.0, 8.0], SA[3.0, 6.0, 9.0]]
         # a point cloud resamples with replacement, so points recur
         pc = PointCloud(M)
         draws = sample_sites(r, pc, 3000)
-        @test all(in(tosites(M)), draws)
+        @test all(in(DynMoSim.tosites(M)), draws)
         @test length(unique(draws)) == 3
         @test count(==(SA[1.0, 4.0, 7.0]), draws) / 3000 ≈ 1 / 3 atol = 0.03
 
         # shapes are 3D only
-        @test_throws DimensionMismatch tosites([1.0 2.0; 3.0 4.0])
+        @test_throws DimensionMismatch DynMoSim.tosites([1.0 2.0; 3.0 4.0])
         @test_throws DimensionMismatch LineSegment([0.0, 0.0], [1.0, 1.0])
     end
 
@@ -337,10 +338,9 @@ rng() = StableRNG(20260905)
 
     @testset "field of view" begin
         f = FieldOfView(SA[-100.0, -50.0, 0.0], SA[100.0, 150.0, 50.0])
-        @test volume(f) == 200.0 * 200.0 * 50.0
 
         r = rng()
-        pts = [randin(r, f) for _ in 1:200_000]
+        pts = [DynMoSim.randin(r, f) for _ in 1:200_000]
         @test all(p -> all(f.lo .<= p .<= f.hi), pts)
         @test mean(pts) ≈ (f.lo .+ f.hi) ./ 2 rtol = 0.02      # uniform => centred
         # uniform on [lo,hi] has variance (hi-lo)^2/12
@@ -669,9 +669,5 @@ rng() = StableRNG(20260905)
         @test a.position == b.position
         @test a.nphotons == b.nphotons
         @test ta.position == tb.position
-
-        # the shape/motion convenience form is the same as building a Structure
-        c, _ = simulate(rng(), SphereSurface(), Similarity(scale=100.0); kw...)
-        @test c.position == a.position
     end
 end

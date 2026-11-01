@@ -21,13 +21,13 @@ using Distributions: Distributions, Geometric
 export at
 
 # core types
-export Localization, LocalizationTable, Truth, columnview
+export Localization, LocalizationTable, Truth
 export positions, precisions, truepositions, errors, nsignal, nbackground, smaptable
 export project
 
 # geometry
 export AbstractShape, SphereSurface, Ball, Ring, LineSegment, PointCloud
-export sample_site, sample_sites, tosites
+export sample_site, sample_sites
 
 # motion
 export AbstractDeformation, Static, Similarity, Composed, Drift, Bend
@@ -37,7 +37,7 @@ export place, rotation
 export eventtimes
 
 # background
-export FieldOfView, Background, randin, volume
+export FieldOfView, Background
 
 # optics
 export AbstractUncertainty, ShotNoise, StallingaRieger, GaussianMask

@@ -29,13 +29,6 @@ function FieldOfView(lo::AbstractVector, hi::AbstractVector)
 end
 
 """
-    volume(f::FieldOfView)
-
-Product of the side lengths.
-"""
-volume(f::FieldOfView) = prod(f.hi .- f.lo)
-
-"""
     randin([rng], f::FieldOfView) -> SVector
 
 A point uniform in the field of view.

@@ -91,7 +91,7 @@ end
 """
     PointCloud(pts)
 
-An explicit reference configuration: wrap a `3 × N` matrix or a vector of 3-vectors. Sampling draws one of the points uniformly at random, so a point cloud behaves like any other shape — use it when you have model points rather than a parametric form.
+An explicit reference configuration: wrap a `3 × N` matrix or a `Vector` of `SVector{3}`s. Sampling draws one of the points uniformly at random, so a point cloud behaves like any other shape — use it when you have model points rather than a parametric form.
 
 With a fresh draw per event, the same point can be selected repeatedly, which is the discrete analogue of a label emitting more than once.
 """
@@ -109,11 +109,9 @@ PointCloud(pts::AbstractMatrix{<:Real}) = PointCloud(tosites(pts))
 """
     tosites(pts) -> Vector{SVector{3,T}}
 
-Convert a `3 × N` matrix of points into static vectors. Accepts a vector of 3-vectors unchanged, so callers can take either form.
+Convert a `3 × N` matrix of points into static vectors.
 """
 function tosites(pts::AbstractMatrix{T}) where {T<:Real}
     size(pts, 1) == 3 || throw(DimensionMismatch("expected 3 rows, got $(size(pts, 1))"))
     return [SVector{3,float(T)}(view(pts, :, j)) for j in axes(pts, 2)]
 end
-
-tosites(pts::AbstractVector{<:SVector{3}}) = collect(pts)
